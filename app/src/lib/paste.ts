@@ -16,6 +16,7 @@ export type PasteOutcome = "pasted" | "copied";
 export async function pastePayload(
   payload: string,
   behavior: Settings["selectionBehavior"],
+  keepOpen = false,
 ): Promise<PasteOutcome> {
   if (payload === "") {
     throw new Error("payload must not be empty");
@@ -25,7 +26,7 @@ export async function pastePayload(
     return "copied";
   }
   try {
-    await invoke("paste_payload", { payload });
+    await invoke("paste_payload", { payload, keepOpen });
     return "pasted";
   } catch (error) {
     console.error("EmoShelf: paste failed, falling back to copy", error);

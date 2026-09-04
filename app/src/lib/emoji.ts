@@ -1,26 +1,50 @@
-// 絵文字カタログの基盤（データ読み込み・検索）。
-// UI は持たない。Shelf 画面・検索画面は v0.1 でこの API の上に作る。
-//
-// データ源: emojibase-data（Unicode CLDR 由来、英語ラベル＋タグ）。
-// 日本語検索の改善は v0.5 の対象で、ここでは英語検索の基盤のみ用意する。
-
 import type { Emoji } from "emojibase";
-import rawData from "emojibase-data/en/data.json";
+import enData from "emojibase-data/en/data.json";
+import enMessages from "emojibase-data/en/messages.json";
+import enShortcodes from "emojibase-data/en/shortcodes/cldr.json";
+import jaData from "emojibase-data/ja/data.json";
+import jaMessages from "emojibase-data/ja/messages.json";
 import type { DisplayMetadata } from "./state";
 
-/** カタログ内の絵文字 1 件（検索・表示に必要な最小情報）。 */
+export type AppLocale = "ja" | "en";
+
 export interface CatalogEntry {
-  /** 実際にコピーされる Unicode 文字（例: "😭"） */
   emoji: string;
-  /** 人間可読名（例: "loudly crying face"） */
+  hexcode: string;
   label: string;
-  /** コードポイント表記（例: "U+1F62D"） */
+  alternateLabel: string;
   codepoint: string;
-  /** 検索用タグ */
   tags: string[];
+  alternateTags: string[];
+  shortcode?: string;
+  group?: number;
+  category: string;
+  categoryKey: string;
 }
 
-/** hexcode（例: "1F62D" / "1F1E6-1F1E8"）を "U+..." 表記に変換する。 */
+export interface CategoryMeta {
+  id: number | "all" | "recent";
+  key: string;
+  label: string;
+  icon: string;
+}
+
+const CATEGORY_ICONS = [
+  "🙂",
+  "👋",
+  "◐",
+  "🐾",
+  "🍜",
+  "🚀",
+  "🎮",
+  "💡",
+  "✨",
+  "🏳️",
+];
+
+type MessageSet = typeof enMessages;
+type RawEmoji = Emoji & { group?: number };
+
 function toCodepoint(hexcode: string): string {
   return hexcode
     .split("-")
@@ -28,79 +52,147 @@ function toCodepoint(hexcode: string): string {
     .join(" ");
 }
 
-/** emojibase の 1 件を CatalogEntry に変換する。 */
-function toEntry(data: Emoji): CatalogEntry {
-  return {
-    emoji: data.emoji,
-    label: data.label,
-    codepoint: toCodepoint(data.hexcode),
-    tags: data.tags ?? [],
-  };
+function messagesFor(locale: AppLocale): MessageSet {
+  return (locale === "ja" ? jaMessages : enMessages) as MessageSet;
 }
 
-let cache: CatalogEntry[] | null = null;
+function dataFor(locale: AppLocale): RawEmoji[] {
+  return (locale === "ja" ? jaData : enData) as RawEmoji[];
+}
 
-/** カタログ全件を返す（初回のみ変換、以後キャッシュ）。 */
-export function getCatalog(): CatalogEntry[] {
-  if (cache === null) {
-    const data = rawData as Emoji[];
-    cache = data
-      .filter((entry) => entry.emoji !== undefined && entry.emoji !== "")
-      .map(toEntry);
+const cache = new Map<AppLocale, CatalogEntry[]>();
+
+export function getCategories(locale: AppLocale): CategoryMeta[] {
+  const groups = messagesFor(locale).groups;
+  return [
+    {
+      id: "all",
+      key: "all",
+      label: locale === "ja" ? "すべて" : "All",
+      icon: "▦",
+    },
+    {
+      id: "recent",
+      key: "recent",
+      label: locale === "ja" ? "最近" : "Recent",
+      icon: "◷",
+    },
+    ...groups.map((group, index) => ({
+      id: group.order,
+      key: group.key,
+      label: group.message,
+      icon: CATEGORY_ICONS[index] ?? "•",
+    })),
+  ];
+}
+
+export function getCatalog(locale: AppLocale = "en"): CatalogEntry[] {
+  const existing = cache.get(locale);
+  if (existing) {
+    return existing;
   }
-  return cache;
+  const alternateLocale: AppLocale = locale === "ja" ? "en" : "ja";
+  const alternateByHex = new Map(
+    dataFor(alternateLocale).map((entry) => [entry.hexcode, entry]),
+  );
+  const groupMessages = messagesFor(locale).groups;
+  const alternateGroupMessages = messagesFor(alternateLocale).groups;
+  const shortcodes = enShortcodes as Record<string, string | string[]>;
+  const result = dataFor(locale)
+    .filter((entry) => entry.emoji)
+    .map((entry): CatalogEntry => {
+      const alternate = alternateByHex.get(entry.hexcode);
+      const shortcodeValue = shortcodes[entry.hexcode];
+      const group = entry.group;
+      const groupMessage =
+        group === undefined
+          ? undefined
+          : groupMessages.find((item) => item.order === group);
+      const alternateGroup =
+        group === undefined
+          ? undefined
+          : alternateGroupMessages.find((item) => item.order === group);
+      return {
+        emoji: entry.emoji,
+        hexcode: entry.hexcode.toLowerCase(),
+        label: entry.label,
+        alternateLabel: alternate?.label ?? entry.label,
+        codepoint: toCodepoint(entry.hexcode),
+        tags: entry.tags ?? [],
+        alternateTags: alternate?.tags ?? [],
+        shortcode: Array.isArray(shortcodeValue)
+          ? shortcodeValue[0]
+          : shortcodeValue,
+        group,
+        category:
+          groupMessage?.message ??
+          alternateGroup?.message ??
+          (locale === "ja" ? "その他" : "Other"),
+        categoryKey: groupMessage?.key ?? alternateGroup?.key ?? "other",
+      };
+    })
+    .sort((left, right) => (left.group ?? 99) - (right.group ?? 99));
+  cache.set(locale, result);
+  return result;
 }
 
-/** 検索クエリを正規化する（小文字化・前後空白除去）。 */
 function normalizeQuery(query: string): string {
-  return query.trim().toLowerCase();
+  return query.trim().toLocaleLowerCase().replace(/_/g, " ");
 }
 
-/**
- * カタログを検索する。ラベル・タグ・絵文字そのものに部分一致する。
- * 結果は「ラベル前方一致 → ラベル部分一致 → タグ一致」の順で並べる。
- */
-export function searchCatalog(query: string, limit = 50): CatalogEntry[] {
-  const q = normalizeQuery(query);
-  if (q === "") {
+function normalizeEmoji(emoji: string): string {
+  return emoji.replace(/[\uFE0E\uFE0F]/g, "");
+}
+
+export function searchCatalog(
+  query: string,
+  limit = 120,
+  locale: AppLocale = "en",
+): CatalogEntry[] {
+  const normalized = normalizeQuery(query);
+  if (!normalized) {
     return [];
   }
-  const startsWithLabel: CatalogEntry[] = [];
-  const containsLabel: CatalogEntry[] = [];
-  const tagMatches: CatalogEntry[] = [];
-  for (const entry of getCatalog()) {
-    const label = entry.label.toLowerCase();
-    if (label.startsWith(q)) {
-      startsWithLabel.push(entry);
-    } else if (label.includes(q) || entry.emoji.includes(q)) {
-      containsLabel.push(entry);
-    } else if (entry.tags.some((tag) => tag.includes(q))) {
-      tagMatches.push(entry);
-    }
-    if (
-      startsWithLabel.length + containsLabel.length + tagMatches.length >=
-      limit * 3
+  const startsWith: CatalogEntry[] = [];
+  const contains: CatalogEntry[] = [];
+  const metadataMatches: CatalogEntry[] = [];
+  for (const entry of getCatalog(locale)) {
+    const labels = [entry.label, entry.alternateLabel].map(normalizeQuery);
+    const tags = [...entry.tags, ...entry.alternateTags].map(normalizeQuery);
+    const shortcode = normalizeQuery(entry.shortcode ?? "");
+    if (labels.some((label) => label.startsWith(normalized))) {
+      startsWith.push(entry);
+    } else if (
+      labels.some((label) => label.includes(normalized)) ||
+      entry.emoji.includes(normalized)
     ) {
-      break;
+      contains.push(entry);
+    } else if (
+      tags.some((tag) => tag.includes(normalized)) ||
+      shortcode.includes(normalized) ||
+      entry.codepoint.toLowerCase().includes(normalized)
+    ) {
+      metadataMatches.push(entry);
     }
   }
-  return [...startsWithLabel, ...containsLabel, ...tagMatches].slice(0, limit);
+  return [...startsWith, ...contains, ...metadataMatches].slice(0, limit);
 }
 
-/** カタログから絵文字本体で 1 件を引く（詳細表示・Shelf 追加用）。 */
-export function findByEmoji(emoji: string): CatalogEntry | undefined {
-  return getCatalog().find((entry) => entry.emoji === emoji);
+export function findByEmoji(
+  emoji: string,
+  locale: AppLocale = "en",
+): CatalogEntry | undefined {
+  const target = normalizeEmoji(emoji);
+  return getCatalog(locale).find(
+    (entry) => normalizeEmoji(entry.emoji) === target,
+  );
 }
 
-/** カタログ情報を ShelfItem 用の表示メタデータに変換する。 */
-export function toDisplayMetadata(
-  entry: CatalogEntry,
-  category?: string,
-): DisplayMetadata {
+export function toDisplayMetadata(entry: CatalogEntry): DisplayMetadata {
   return {
     name: entry.label,
     unicode: entry.codepoint,
-    category,
-    keywords: entry.tags,
+    category: entry.category,
+    keywords: [...new Set([...entry.tags, ...entry.alternateTags])],
   };
 }

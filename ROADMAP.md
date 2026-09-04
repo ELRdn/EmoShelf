@@ -82,13 +82,13 @@ This is the first real product milestone.
 
 ## 1. Onboarding
 
-- [ ] Welcome screen
-- [ ] Full emoji catalog on first run
-- [ ] Let user select frequently used emojis
-- [ ] Create `My Shelf`
-- [ ] Explain global shortcut
-- [ ] Optional Skip path
-- [ ] Save onboarding completion
+- [x] Welcome screen
+- [x] Full emoji catalog on first run
+- [x] Let user select frequently used emojis
+- [x] Create `My Shelf`
+- [x] Explain global shortcut
+- [x] Optional Skip path
+- [x] Save onboarding completion
 
 ### Acceptance
 
@@ -98,15 +98,15 @@ A new user should understand within the first session that EmoShelf is a **Shelf
 
 ## 2. Shelf Home
 
-- [ ] `My Shelf` as default Board
-- [ ] Horizontal Board tabs
-- [ ] `+` New Board action
-- [ ] Emoji grid
-- [ ] Empty state
-- [ ] Add-to-Shelf action
-- [ ] Remove-from-Shelf action
-- [ ] Selected emoji state
-- [ ] Action footer
+- [x] `My Shelf` as default Board
+- [x] Horizontal Board tabs
+- [x] `+` New Board action
+- [x] Emoji grid
+- [x] Empty state
+- [x] Add-to-Shelf action
+- [x] Remove-from-Shelf action
+- [x] Selected emoji state
+- [x] Action footer
 
 ### Acceptance
 
@@ -116,13 +116,13 @@ After onboarding, the app opens directly to the user's Shelf.
 
 ## 3. Boards
 
-- [ ] Create Board
-- [ ] Rename Board
-- [ ] Change Board icon
-- [ ] Reorder Boards
-- [ ] Delete Board with confirmation/undo
-- [ ] Flat Board model only
-- [ ] Prevent accidental destructive edits
+- [x] Create Board
+- [x] Rename Board
+- [x] Change Board icon
+- [x] Reorder Boards
+- [x] Delete Board with confirmation/undo
+- [x] Flat Board model only
+- [x] Prevent accidental destructive edits
 
 ### Non-goal
 
@@ -132,12 +132,12 @@ No nested folders or workspace hierarchy.
 
 ## 4. Edit Shelf mode
 
-- [ ] Explicit `Edit Shelf` mode
-- [ ] Drag-and-drop emoji reordering
-- [ ] Remove item
-- [ ] Move item
-- [ ] Copy item to another Board
-- [ ] Exit edit mode cleanly
+- [x] Explicit `Edit Shelf` mode
+- [x] Drag-and-drop emoji reordering
+- [x] Remove item
+- [x] Move item
+- [x] Copy item to another Board
+- [x] Exit edit mode cleanly
 
 ### UX rule
 
@@ -148,11 +148,11 @@ Normal browsing should not allow accidental drag reordering.
 ## 5. Emoji Catalog
 
 - [x] Unicode emoji dataset
-- [ ] Categories
+- [x] Categories
 - [x] Search
 - [x] Emoji names
-- [ ] Add to Board
-- [ ] Recently used section
+- [x] Add to Board
+- [x] Recently used section
 
 ### Acceptance
 
@@ -162,11 +162,11 @@ The catalog is easy to reach, but never dominates the normal Home experience.
 
 ## 6. Twemoji renderer
 
-- [ ] Twemoji as default visual renderer
-- [ ] Separate renderer from copied Unicode payload
-- [ ] Fallback behavior
-- [ ] Attribution / license documentation
-- [ ] Rendering performance validation
+- [x] Twemoji as default visual renderer
+- [x] Separate renderer from copied Unicode payload
+- [x] Fallback behavior
+- [x] Attribution / license documentation
+- [x] Rendering performance validation
 
 ### Acceptance
 
@@ -185,8 +185,8 @@ Hotkey → Shelf → Click → Paste → Close
 - [x] Clipboard integration
 - [x] Paste into foreground app
 - [x] Restore focus correctly
-- [ ] Close after successful selection
-- [ ] Failure handling
+- [x] Close after successful selection
+- [x] Failure handling
 - [x] `Copy only` fallback
 
 ### Acceptance
@@ -199,7 +199,7 @@ The common path should feel faster than opening a general-purpose emoji picker.
 
 - [x] Default `Alt + E`
 - [x] Custom shortcut setting
-- [ ] Conflict detection where practical
+- [x] Conflict detection where practical
 - [x] Show/hide toggle
 - [x] Return focus correctly
 
@@ -207,22 +207,22 @@ The common path should feel faster than opening a general-purpose emoji picker.
 
 ## 9. Quick / Pinned behavior
 
-- [ ] Quick mode
-- [ ] Pinned mode
-- [ ] Visible Pin control
-- [ ] Remember preferred behavior if configured
+- [x] Quick mode
+- [x] Pinned mode
+- [x] Visible Pin control
+- [x] Remember preferred behavior if configured
 
 ---
 
 ## 10. Appearance
 
-- [ ] Dark mode
-- [ ] Light mode
-- [ ] System mode
-- [ ] Raycast-inspired compact layout
-- [ ] Discord-like warmth through emoji presentation
-- [ ] Motion and hover states
-- [ ] Reduced-motion support
+- [x] Dark mode
+- [x] Light mode
+- [x] System mode
+- [x] Raycast-inspired compact layout
+- [x] Discord-like warmth through emoji presentation
+- [x] Motion and hover states
+- [x] Reduced-motion support
 
 ---
 

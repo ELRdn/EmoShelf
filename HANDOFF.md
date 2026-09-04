@@ -1,6 +1,6 @@
 # EmoShelf 引き継ぎ書
 
-> 最終更新: 2026-09-04（基礎構築: DSH / Scarlet 🦊、Phase 0 完了検証: Cyan/Codex）
+> 最終更新: 2026-09-04（基礎構築: DSH / Scarlet 🦊、Phase 0・v0.1: Cyan/Codex）
 > このファイルは他エージェントへの引き継ぎ用。作業開始前にここから読むこと。
 
 ## 0. 読み順（5分コース）
@@ -27,24 +27,31 @@
 
 - **Phase 0（基盤）全10項目**: Tauri 雛形、状態モデル、永続化形式、Biome、ビルドコマンド、
   Windows パッケージ設定（NSIS/MSI）、CI、仮アイコン、ライセンス決定
-- **UI 以外の基礎（v0.1 のデータ層）**:
+- **v0.1 Shelf UI**:
+  - Concept 2.5を基準にした完全カスタムフレーム、Boardタブ、Shelf、検索、詳細ペイン、フッター
+  - オンボーディング、Board作成・名称/アイコン変更・並べ替え・削除Undo、明示的なShelf編集モード
+  - 1949件のカタログ仮想化、カテゴリ、日本語/英語検索、OS言語初期値と設定上書き
+  - Twemoji/Native切替とフォールバック、Dark/Light/System、Reduced Motion、Quick/Pinned
+  - Windows 11 Snap Layout用`HTMAXBUTTON`ヒットテスト、対象アプリへのフォーカス復帰
+- **v0.1 データ層**:
   - Rust: `load_state` / `save_state`（アトミック保存・`.bak` 復旧）/
     `set_global_shortcut` / `paste_payload`（クリップボード→非表示→Ctrl+V）
   - プラグイン: `global-shortcut`・`clipboard-manager`・`single-instance`・`window-state`、キー送出に `enigo`
-  - フロント: zustand ストア（CRUD・並べ替え・使用記録・デバウンス保存）、
-    emojibase 全1949件＋検索ロジック、ペースト API＋コピーフォールバック
+  - フロント: zustandストア（CRUD・並べ替え・使用記録・デバウンス保存）、
+    emojibase全1949件＋日英検索、ペーストAPI＋コピーフォールバック
+  - schema v2: 判別可能ShelfItem、型付きRecent、v1移行、未知フィールド保持、未来schema上書き防止
 - **Rust 基盤検証**: lockfile 固定のコンパイル、Clippy（警告をエラー扱い）、
   永続化・ショートカット解析の単体テスト 9 件
 - **Windows 実機検証**: release ビルドの起動、`Alt+E` による表示／非表示、
   二重起動時の既存ウィンドウ前面化を確認。NSIS `.exe` と MSI `.msi` も生成済み
-- `ROADMAP.md` の該当チェックボックスは反映済み（Phase 0 全10＋v0.1 データ層20項目）
+- **フロント検証**: TypeScript、Biome、Vitest/React Testing Library/axe（13件）、production build
+- `ROADMAP.md` のPhase 0とv0.1チェックボックスは実装・検証結果へ同期済み
 
-### 未着手（＝次の作業）
+### 次の作業
 
-- v0.1 の **UI 全部**: オンボーディング、Shelf グリッド、Board タブ、詳細パネル、
-  検索 UI、Board 編集 UI、設定画面、Toast、ダーク/ライト見た目、モーション
-- v0.1 ロジック側の残り: 競合検出（ショートカット）、カテゴリ分類表示、
-  「選択後に閉じる」挙動（UI と一体）、Twemoji レンダラー
+- v0.2: Compose Tray、絵文字シーケンス、完全なキーボード移動、`.emoshelf` Import/Export
+- v0.3以降: アプリ別Board、Windows統合、カスタム画像/Renderer Pack、品質・Updater
+- Viteの500kB超チャンク警告は未解消。v1.0検証ゲートまでにデータ・locale・画面単位で分割する
 
 ## 3. 主要ファイル
 
@@ -62,15 +69,18 @@
     ├── README.md                       # 開発者向け説明
     ├── docs/persistence.md             # state.json 仕様（正本）
     ├── src/
-    │   ├── App.tsx / main.tsx          # 基盤確認用の仮シェルのみ
+    │   ├── App.tsx / App.css            # Concept 2.5 Shelf UI
+    │   ├── components/                  # 仮想化、D&D、Twemoji、オンボーディング
+    │   ├── test/                        # Vitest共通設定
     │   └── lib/
-    │       ├── state.ts                # 型の正本（STATE_SCHEMA_VERSION = 1）
+    │       ├── state.ts                # 型の正本（STATE_SCHEMA_VERSION = 2）
     │       ├── store.ts                # zustand ストア
     │       ├── emoji.ts                # カタログ・検索
-    │       └── paste.ts                # ペースト実行
+    │       ├── paste.ts                # ペースト実行
+    │       └── i18n.ts                 # 日本語/英語UI文言
     └── src-tauri/
         ├── Cargo.toml                  # プラグイン・enigo 追加済み
-        ├── tauri.conf.json             # 製品名 EmoShelf、800x600、bundle targets: all
+        ├── tauri.conf.json             # 製品名 EmoShelf、880x660、カスタムフレーム
         ├── capabilities/default.json   # core/opener/clipboard-manager
         ├── src/lib.rs                  # Rust 基盤（コマンド4件）
         └── icons/                      # テンプレ既定の仮アイコン
@@ -80,7 +90,7 @@
 
 ```sh
 pnpm install     # 依存インストール
-pnpm check       # 型チェック ＋ Biome（基本はこれ）
+pnpm check       # 型チェック ＋ Biome ＋ Vitest（基本はこれ）
 pnpm build       # 本番フロントビルド
 pnpm tauri dev   # アプリ起動
 pnpm tauri build # NSIS / MSI 生成
@@ -113,8 +123,8 @@ cargo check --locked
 6. **npm/pnpm のキャッシュ・ストア**: サンドボックスでは `AppData\Local` 直下への
    書き込みが EPERM になる。回避には `$env:TEMP` 配下へのリダイレクト
    （`XDG_CACHE_HOME`、`--store-dir`）を使うこと。通常環境では不要。
-7. **Vite のチャンクサイズ警告**: emojibase 全件を含むため、基盤シェルでも 500 kB 超の
-   警告が出る。Phase 0 のブロッカーではなく、v0.1 の性能計測と分割方針で扱う。
+7. **Vite のチャンクサイズ警告**: 日英emojibase全件を含むため500kB超の警告が出る。
+   1949件のDOM描画は仮想化済みだが、配信チャンクはv1.0までに分割する。
 
 ## 6. 決定事項（覆す場合は記録を残すこと）
 
@@ -123,21 +133,19 @@ cargo check --locked
 | 配置 | アプリは `app/` 配下 | ルート README 保護 |
 | ライセンス | Apache-2.0 | ご主人選択（特許条項あり） |
 | 状態管理 | zustand | 軽量、Tauri との相性 |
-| 絵文字データ | emojibase-data v17（英語） | CLDR 由来、タグ付き。日本語検索は v0.5 で対応 |
+| 絵文字データ | emojibase-data v17（日本語＋英語） | CLDR由来、1949件。表示言語と別に両言語で検索可能 |
 | 保存方式 | 自前 `state.json`（Rust コマンド） | アトミック保存・`.bak` 復旧を明示的に制御するため。`tauri-plugin-store` は不採用 |
 | 整形・lint | Biome（ESLint/Prettier 不使用） | 高速・単一ツール |
 | ショートカット登録 | Rust が所有、フロントは設定値の通知のみ | 二重登録・競合の単一管理点化 |
 | ペースト方式 | クリップボード＋enigo の Ctrl+V | 標準的構成。失敗時は Copy only に自動フォールバック |
 
-## 7. 次の作業の推奨順序（v0.1 UI）
+## 7. 次の作業の推奨順序（v0.2）
 
-1. オンボーディング（初回カタログ選択 → My Shelf 生成）— 製品の顔
-2. Shelf Home（Board タブ＋絵文字グリッド＋クリックペースト配線）
-3. 詳細パネル＋フッター（Concept 2.5 の右側・下部）
-4. Board 編集モード（D&D 並べ替え・移動・削除＋Undo 配慮）
-5. 検索 UI（`searchCatalog` に接続、キーボード操作）
-6. 設定画面（ショートカット・動作・テーマ・データ Export/Import/Reset）
-7. Twemoji レンダラー＋見た目仕上げ（トークンは `DESIGN.md` §25・§26）
+1. Compose Trayと複数絵文字のUndo/Clear/Copy/Paste
+2. sequence項目の保存・再利用・編集
+3. 矢印キー移動と固定ショートカット仕様の完了
+4. `.emoshelf` ZIPのExport/Import、プレビュー、Merge/Replace、バックアップ保護
+5. Renderer Pack配布契約とライセンスUIの基礎
 
 ## 8. 規約
 

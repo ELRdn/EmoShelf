@@ -1,7 +1,7 @@
 # EmoShelf CI
 #
 # Phase 0 の基盤検証:
-# - フロント: 型チェック + Biome + Vite ビルド
+# - フロント: 型チェック + Biome + Vitest + Vite ビルド
 # - Rust: fmt + clippy + test + check
 # - Windows パッケージング: NSIS / MSI の実ビルド
 
@@ -17,7 +17,7 @@ env:
 
 jobs:
   frontend:
-    name: Frontend (typecheck / lint / build)
+    name: Frontend (typecheck / lint / test / build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -38,6 +38,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      - run: pnpm test
       - run: pnpm build
 
   rust:
