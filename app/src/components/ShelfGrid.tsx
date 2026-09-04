@@ -18,6 +18,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { AppLocale } from "../lib/emoji";
 import { translate } from "../lib/i18n";
 import type { RendererId, ShelfItem } from "../lib/state";
+import { CustomAssetArtwork } from "./CustomAssetArtwork";
 import { EmojiArtwork } from "./EmojiArtwork";
 
 interface ShelfGridProps {
@@ -72,7 +73,6 @@ function SortableShelfItem({
   } = useSortable({
     id: item.id,
   });
-  const payload = item.type === "image" ? "🖼️" : item.payload;
   return (
     <li
       className={`emoji-tile shelf-tile is-editable${selected ? " is-selected" : ""}${isDragging ? " is-dragging" : ""}${glowClass(item, shelfGlow)}`}
@@ -87,12 +87,16 @@ function SortableShelfItem({
         {...attributes}
         {...listeners}
       >
-        <EmojiArtwork
-          className="emoji-art"
-          emoji={payload}
-          locale={locale}
-          renderer={renderer}
-        />
+        {item.type === "image" ? (
+          <CustomAssetArtwork assetId={item.assetId} className="emoji-art" />
+        ) : (
+          <EmojiArtwork
+            className="emoji-art"
+            emoji={item.payload}
+            locale={locale}
+            renderer={renderer}
+          />
+        )}
         <span className="drag-grip" aria-hidden="true">
           ⠿
         </span>
@@ -172,7 +176,6 @@ export function ShelfGrid({
   return (
     <ul className="shelf-grid">
       {items.map((item) => {
-        const payload = item.type === "image" ? "🖼️" : item.payload;
         return (
           <li key={item.id}>
             <button
@@ -182,12 +185,19 @@ export function ShelfGrid({
               title={item.display.name}
               type="button"
             >
-              <EmojiArtwork
-                className="emoji-art"
-                emoji={payload}
-                locale={locale}
-                renderer={renderer}
-              />
+              {item.type === "image" ? (
+                <CustomAssetArtwork
+                  assetId={item.assetId}
+                  className="emoji-art"
+                />
+              ) : (
+                <EmojiArtwork
+                  className="emoji-art"
+                  emoji={item.payload}
+                  locale={locale}
+                  renderer={renderer}
+                />
+              )}
             </button>
           </li>
         );

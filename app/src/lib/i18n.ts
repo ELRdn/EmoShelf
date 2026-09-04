@@ -105,7 +105,7 @@ const ja = {
   replaceImportConfirm:
     "現在のBoardと設定を置き換えます。バックアップ後に続行しますか？",
   importComplete: "Importを適用しました",
-  unavailableRenderer: "Renderer Packが必要（v0.4）",
+  unavailableRenderer: "署名済みRenderer Packが必要",
   rendererAttributions: "Rendererのライセンスと帰属",
   contextAware: "アプリ別Shelf",
   perAppBoards: "前面アプリに合わせてBoardを切り替える",
@@ -237,7 +237,7 @@ const en: Record<keyof typeof ja, string> = {
   replaceImportConfirm:
     "Replace current Boards and settings after creating a backup?",
   importComplete: "Import applied",
-  unavailableRenderer: "Renderer Pack required (v0.4)",
+  unavailableRenderer: "Signed Renderer Pack required",
   rendererAttributions: "Renderer licenses and attribution",
   contextAware: "Per-app Shelf",
   perAppBoards: "Switch Boards for the foreground app",

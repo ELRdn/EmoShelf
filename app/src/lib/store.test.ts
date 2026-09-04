@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type Board, createInitialState } from "./state";
-import { getFrequentItems, useShelfStore } from "./store";
+import { countAssetReferences, getFrequentItems, useShelfStore } from "./store";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
@@ -47,6 +47,7 @@ describe("shelf store", () => {
     const removed = board("b", "Beta", 1);
     useShelfStore.setState({
       boards: [board("a", "Alpha", 0), removed, board("c", "Gamma", 2)],
+      appBoardMappings: { "code.exe": "b", "notepad.exe": "a" },
     });
 
     useShelfStore.getState().removeBoard("b");
@@ -54,6 +55,9 @@ describe("shelf store", () => {
       "a",
       "c",
     ]);
+    expect(useShelfStore.getState().appBoardMappings).toEqual({
+      "notepad.exe": "a",
+    });
 
     useShelfStore.getState().restoreBoard(removed, 1);
     expect(
@@ -278,5 +282,95 @@ describe("shelf store", () => {
       enabled: true,
     });
     expect(useShelfStore.getState().settings.autostart).toBe(true);
+  });
+
+  it("counts Board and Recent references before allowing asset deletion", () => {
+    const image = {
+      id: "image-item",
+      type: "image" as const,
+      assetId: "a".repeat(64),
+      display: { name: "Custom image", keywords: [] },
+      usage: { addedAt: "2026-01-01T00:00:00Z", useCount: 1 },
+    };
+    const state = createInitialState();
+    state.boards = [{ ...board("images", "Images", 0), items: [image] }];
+    state.recent = [
+      {
+        id: `image:${image.assetId}`,
+        type: "image",
+        assetId: image.assetId,
+        usedAt: "2026-01-01T00:00:00Z",
+      },
+    ];
+
+    expect(countAssetReferences(state, image.assetId)).toBe(2);
+  });
+
+  it("registers a deduplicated asset and refuses to delete it while referenced", async () => {
+    const id = "b".repeat(64);
+    const asset = {
+      id,
+      fileName: `${id}.png`,
+      mediaType: "image/png" as const,
+      width: 64,
+      height: 64,
+      byteLength: 512,
+      sha256: id,
+      addedAt: "2026-01-01T00:00:00Z",
+    };
+    useShelfStore.getState().registerCustomAsset(asset);
+    useShelfStore.getState().registerCustomAsset(asset);
+    const boardId = useShelfStore.getState().addBoard("Images", "▧");
+    useShelfStore.getState().addItemToBoard(boardId, {
+      type: "image",
+      assetId: id,
+      display: { name: "Custom image", keywords: [] },
+    });
+
+    await expect(useShelfStore.getState().removeCustomAsset(id)).resolves.toBe(
+      false,
+    );
+    expect(Object.keys(useShelfStore.getState().customAssets)).toEqual([id]);
+    expect(mockedInvoke).not.toHaveBeenCalledWith(
+      "remove_custom_asset",
+      expect.anything(),
+    );
+  });
+
+  it("removes ephemeral Recent references before deleting an unused asset", async () => {
+    const id = "c".repeat(64);
+    useShelfStore.setState({
+      customAssets: {
+        [id]: {
+          id,
+          fileName: `${id}.png`,
+          mediaType: "image/png",
+          width: 32,
+          height: 32,
+          byteLength: 256,
+          sha256: id,
+          addedAt: "2026-01-01T00:00:00Z",
+        },
+      },
+      recent: [
+        {
+          id: `image:${id}`,
+          type: "image",
+          assetId: id,
+          usedAt: "2026-01-01T00:00:00Z",
+        },
+      ],
+    });
+    mockedInvoke.mockResolvedValueOnce(undefined).mockResolvedValueOnce(true);
+
+    await expect(useShelfStore.getState().removeCustomAsset(id)).resolves.toBe(
+      true,
+    );
+    expect(mockedInvoke).toHaveBeenNthCalledWith(2, "remove_custom_asset", {
+      assetId: id,
+      stateJson: expect.not.stringContaining(id),
+    });
+    expect(useShelfStore.getState().customAssets).toEqual({});
+    expect(useShelfStore.getState().recent).toEqual([]);
   });
 });

@@ -60,7 +60,7 @@ export interface RecentEntry {
 export interface CustomAsset {
   id: string;
   fileName: string;
-  mediaType: "image/png" | "image/webp";
+  mediaType: "image/png";
   width: number;
   height: number;
   byteLength: number;
@@ -172,16 +172,34 @@ const recentSchema = z
 
 const customAssetSchema = z
   .object({
-    id: z.string().min(1),
-    fileName: z.string().min(1),
-    mediaType: z.enum(["image/png", "image/webp"]),
-    width: z.number().int().positive(),
-    height: z.number().int().positive(),
-    byteLength: z.number().int().nonnegative(),
-    sha256: z.string().min(1),
+    id: z.string().regex(/^[0-9a-f]{64}$/),
+    fileName: z.string().regex(/^[0-9a-f]{64}\.png$/),
+    mediaType: z.literal("image/png"),
+    width: z.number().int().positive().max(2048),
+    height: z.number().int().positive().max(2048),
+    byteLength: z
+      .number()
+      .int()
+      .positive()
+      .max(8 * 1024 * 1024),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/),
     addedAt: z.string(),
   })
-  .passthrough();
+  .passthrough()
+  .superRefine((asset, context) => {
+    if (asset.id !== asset.sha256 || asset.fileName !== `${asset.id}.png`) {
+      context.addIssue({
+        code: "custom",
+        message: "custom asset identity must match normalized PNG hash",
+      });
+    }
+    if (asset.width * asset.height > 4_194_304) {
+      context.addIssue({
+        code: "custom",
+        message: "custom asset exceeds the pixel safety limit",
+      });
+    }
+  });
 
 const settingsSchema = z
   .object({
@@ -215,7 +233,45 @@ const stateV2Schema = z
     customAssets: z.record(z.string(), customAssetSchema),
     extensions: z.record(z.string(), z.unknown()),
   })
-  .passthrough();
+  .passthrough()
+  .superRefine((state, context) => {
+    for (const [key, asset] of Object.entries(state.customAssets)) {
+      if (key !== asset.id) {
+        context.addIssue({
+          code: "custom",
+          path: ["customAssets", key],
+          message: "custom asset map key must match its content hash ID",
+        });
+      }
+    }
+    const validateReference = (assetId: string, path: (string | number)[]) => {
+      if (!state.customAssets[assetId]) {
+        context.addIssue({
+          code: "custom",
+          path,
+          message: "image reference must point to an existing custom asset",
+        });
+      }
+    };
+    state.boards.forEach((board, boardIndex) => {
+      board.items.forEach((item, itemIndex) => {
+        if (item.type === "image") {
+          validateReference(item.assetId, [
+            "boards",
+            boardIndex,
+            "items",
+            itemIndex,
+            "assetId",
+          ]);
+        }
+      });
+    });
+    state.recent.forEach((entry, index) => {
+      if (entry.type === "image" && entry.assetId) {
+        validateReference(entry.assetId, ["recent", index, "assetId"]);
+      }
+    });
+  });
 
 export class FutureStateVersionError extends Error {
   constructor(readonly version: number) {

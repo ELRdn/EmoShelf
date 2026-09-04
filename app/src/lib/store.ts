@@ -3,6 +3,7 @@ import { create } from "zustand";
 import {
   type AppState,
   type Board,
+  type CustomAsset,
   createInitialState,
   FutureStateVersionError,
   type NewShelfItem,
@@ -103,6 +104,28 @@ export function getFrequentItems(boards: Board[], limit = 30): ShelfItem[] {
     .slice(0, limit);
 }
 
+export function countAssetReferences(
+  state: Pick<AppState, "boards" | "recent">,
+  assetId: string,
+): number {
+  const boardReferences = state.boards
+    .flatMap((board) => board.items)
+    .filter((item) => item.type === "image" && item.assetId === assetId).length;
+  const recentReferences = state.recent.filter(
+    (entry) => entry.type === "image" && entry.assetId === assetId,
+  ).length;
+  return boardReferences + recentReferences;
+}
+
+export function countAssetBoardReferences(
+  state: Pick<AppState, "boards">,
+  assetId: string,
+): number {
+  return state.boards
+    .flatMap((board) => board.items)
+    .filter((item) => item.type === "image" && item.assetId === assetId).length;
+}
+
 function normalizeBoards(boards: Board[]): Board[] {
   return boards.map((board, order) => ({ ...board, order }));
 }
@@ -148,6 +171,8 @@ export interface ShelfStore extends AppState {
     payload: string,
     name?: string,
   ) => boolean;
+  registerCustomAsset: (asset: CustomAsset) => void;
+  removeCustomAsset: (assetId: string) => Promise<boolean>;
   applyImportedState: (state: AppState, mode: ImportMode) => Promise<void>;
   setAppBoardMapping: (application: string, boardId?: string) => boolean;
   setAutostart: (enabled: boolean) => Promise<void>;
@@ -288,7 +313,12 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
       get().settings.defaultBoardId === boardId
         ? { ...get().settings, defaultBoardId: nextBoards[0]?.id }
         : get().settings;
-    withSave(set, get, { boards: nextBoards, settings });
+    const appBoardMappings = Object.fromEntries(
+      Object.entries(get().appBoardMappings).filter(
+        ([, mappedBoardId]) => mappedBoardId !== boardId,
+      ),
+    );
+    withSave(set, get, { boards: nextBoards, settings, appBoardMappings });
   },
 
   restoreBoard: (board, index) => {
@@ -464,6 +494,48 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
       withSave(set, get, { boards });
     }
     return changed;
+  },
+
+  registerCustomAsset: (asset) => {
+    const existing = get().customAssets[asset.id];
+    if (existing) {
+      return;
+    }
+    withSave(set, get, {
+      customAssets: { ...get().customAssets, [asset.id]: asset },
+    });
+  },
+
+  removeCustomAsset: async (assetId) => {
+    const current = snapshotState(get());
+    if (
+      !current.customAssets[assetId] ||
+      countAssetBoardReferences(current, assetId) > 0
+    ) {
+      return false;
+    }
+    const customAssets = { ...current.customAssets };
+    delete customAssets[assetId];
+    const recent = current.recent.filter(
+      (entry) => entry.type !== "image" || entry.assetId !== assetId,
+    );
+    set({ customAssets, recent, saveError: undefined });
+    try {
+      await get().persistNow();
+      await invoke<boolean>("remove_custom_asset", {
+        assetId,
+        stateJson: JSON.stringify(snapshotState(get())),
+      });
+      return true;
+    } catch (error) {
+      set({ ...current, saveError: String(error) });
+      try {
+        await get().persistNow();
+      } catch {
+        // The original error is more actionable; keep it below.
+      }
+      throw error;
+    }
   },
 
   applyImportedState: async (incoming, mode) => {

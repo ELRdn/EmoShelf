@@ -236,4 +236,41 @@ describe("EmoShelf UI", () => {
       popupPositionBehavior: "active-monitor",
     });
   });
+
+  it("adds a content-addressed custom image from the local library to a Board", async () => {
+    const user = userEvent.setup();
+    const initial = createInitialState();
+    const id = "d".repeat(64);
+    useShelfStore.setState({
+      ...initial,
+      loaded: true,
+      onboardingCompleted: true,
+      boards: [{ id: "images", name: "Images", order: 0, items: [] }],
+      customAssets: {
+        [id]: {
+          id,
+          fileName: `${id}.png`,
+          mediaType: "image/png",
+          width: 64,
+          height: 64,
+          byteLength: 256,
+          sha256: id,
+          addedAt: "2026-01-01T00:00:00Z",
+        },
+      },
+      settings: { ...initial.settings, locale: "ja" },
+    });
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: /画像/ }));
+    await user.click(
+      screen.getByRole("button", { name: "カスタム画像 64×64" }),
+    );
+    await user.click(screen.getByRole("button", { name: /Shelfへ追加/ }));
+
+    expect(useShelfStore.getState().boards[0]?.items[0]).toMatchObject({
+      type: "image",
+      assetId: id,
+    });
+  });
 });

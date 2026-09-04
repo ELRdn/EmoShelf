@@ -22,11 +22,12 @@ independent from these graphics.
 The complete dependency license inventory will be regenerated and audited for
 the v1.0 release package.
 
-## Optional renderer packs (not bundled in v0.2)
+## Optional renderer packs (not bundled in v0.4)
 
-The following renderers are shown in the application as unavailable until the
-signed Renderer Pack system is delivered. Their artwork is not distributed in
-the v0.2 application package.
+The application can install the following renderers through its signed
+Renderer Pack system. Their artwork is not distributed in the v0.4 application
+package and remains unavailable until a compatible pack signed by the trusted
+EmoShelf renderer key is installed and enabled.
 
 - Fluent Emoji graphics — Microsoft, MIT License
 - Noto Emoji SVG/image resources — Google, Apache License 2.0; the font files
@@ -34,4 +35,5 @@ the v0.2 application package.
 - OpenMoji graphics — OpenMoji contributors, CC BY-SA 4.0; related code uses
   LGPL-3.0
 
-Each future pack must carry its exact upstream license and attribution files.
+Each pack must carry its exact upstream license and attribution files. EmoShelf
+shows that metadata in the renderer settings before the pack can be used.

@@ -6,6 +6,7 @@ import {
   exportEmoShelf,
   type ImportMode,
   type ImportPreview,
+  installEmoShelfAssets,
   openEmoShelfPreview,
 } from "../lib/transfer";
 
@@ -47,6 +48,7 @@ export function DataTransferDialog({
       return;
     }
     void run(async () => {
+      await installEmoShelfAssets(preview.path);
       await onApply(preview.state, mode);
       setPreview(undefined);
     });
@@ -98,6 +100,10 @@ export function DataTransferDialog({
             <div>
               <dt>{translate(locale, "items")}</dt>
               <dd>{preview.itemCount}</dd>
+            </div>
+            <div>
+              <dt>{locale === "ja" ? "カスタム画像" : "Custom images"}</dt>
+              <dd>{preview.assetCount}</dd>
             </div>
             <div>
               <dt>{translate(locale, "exportedAt")}</dt>
