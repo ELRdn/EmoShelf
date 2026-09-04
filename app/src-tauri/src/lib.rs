@@ -11,9 +11,24 @@ use std::str::FromStr;
 use std::sync::Mutex;
 use std::time::Duration;
 
+#[cfg(windows)]
+use std::sync::atomic::{AtomicIsize, Ordering};
+
 use tauri::Manager;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+
+#[cfg(windows)]
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+#[cfg(windows)]
+use windows::Win32::Graphics::Gdi::ScreenToClient;
+#[cfg(windows)]
+use windows::Win32::UI::HiDpi::GetDpiForWindow;
+#[cfg(windows)]
+use windows::Win32::UI::WindowsAndMessaging::{
+    CallWindowProcW, DefWindowProcW, GetClientRect, GetForegroundWindow, SetForegroundWindow,
+    SetWindowLongPtrW, GWLP_WNDPROC, HTCLIENT, HTMAXBUTTON, WM_NCHITTEST, WNDPROC,
+};
 
 /// 状態ファイル名（appLocalData 直下に保存）。
 const STATE_FILE_NAME: &str = "state.json";
@@ -29,6 +44,111 @@ const DEFAULT_SHORTCUT: &str = "alt+e";
 /// 現在登録中のグローバルショートカット（差し替え時に解除するため保持）。
 struct ActiveShortcut(Mutex<Option<Shortcut>>);
 
+/// ショートカットを押す直前に前面だったウィンドウ。フルパスやタイトルは保持しない。
+struct PasteTarget(Mutex<Option<isize>>);
+
+#[cfg(windows)]
+static ORIGINAL_WNDPROC: AtomicIsize = AtomicIsize::new(0);
+
+#[cfg(windows)]
+fn hwnd_to_isize(hwnd: HWND) -> isize {
+    hwnd.0 as isize
+}
+
+#[cfg(windows)]
+fn isize_to_hwnd(value: isize) -> HWND {
+    HWND(value as *mut core::ffi::c_void)
+}
+
+#[cfg(windows)]
+fn remember_foreground_target(app: &tauri::AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let Ok(own_hwnd) = window.hwnd() else {
+        return;
+    };
+    // SAFETY: GetForegroundWindow only reads the current desktop foreground handle.
+    let foreground = unsafe { GetForegroundWindow() };
+    if foreground.is_invalid() || foreground == own_hwnd {
+        return;
+    }
+    if let Ok(mut guard) = app.state::<PasteTarget>().0.lock() {
+        *guard = Some(hwnd_to_isize(foreground));
+    }
+}
+
+#[cfg(not(windows))]
+fn remember_foreground_target(_app: &tauri::AppHandle) {}
+
+#[cfg(windows)]
+unsafe extern "system" fn snap_window_proc(
+    hwnd: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    let previous = ORIGINAL_WNDPROC.load(Ordering::Relaxed);
+    let base_result = if previous == 0 {
+        // SAFETY: The values are passed through unchanged from Windows.
+        unsafe { DefWindowProcW(hwnd, message, wparam, lparam) }
+    } else {
+        // SAFETY: SetWindowLongPtrW returned the previous procedure for this exact window.
+        let previous_proc: WNDPROC = unsafe { std::mem::transmute(previous) };
+        unsafe { CallWindowProcW(previous_proc, hwnd, message, wparam, lparam) }
+    };
+
+    if message != WM_NCHITTEST || base_result.0 != HTCLIENT as isize {
+        return base_result;
+    }
+
+    let packed = lparam.0;
+    let mut point = POINT {
+        x: (packed as i16) as i32,
+        y: ((packed >> 16) as i16) as i32,
+    };
+    let mut rect = RECT::default();
+    // SAFETY: hwnd is the window currently receiving WM_NCHITTEST and both pointers are valid.
+    if !unsafe { ScreenToClient(hwnd, &mut point) }.as_bool()
+        || unsafe { GetClientRect(hwnd, &mut rect) }.is_err()
+    {
+        return base_result;
+    }
+
+    // CSS titlebar 48px and Windows control width 46px, converted to physical pixels.
+    let dpi = unsafe { GetDpiForWindow(hwnd) }.max(96) as i32;
+    let title_height = 48 * dpi / 96;
+    let control_width = 46 * dpi / 96;
+    let max_left = rect.right - control_width * 2;
+    let max_right = rect.right - control_width;
+    if point.y >= 0 && point.y < title_height && point.x >= max_left && point.x < max_right {
+        return LRESULT(HTMAXBUTTON as isize);
+    }
+
+    base_result
+}
+
+#[cfg(windows)]
+fn install_snap_layout_hit_test(window: &tauri::Window) -> Result<(), String> {
+    if ORIGINAL_WNDPROC.load(Ordering::Relaxed) != 0 {
+        return Ok(());
+    }
+    let hwnd = window.hwnd().map_err(|error| error.to_string())?;
+    // SAFETY: We replace the procedure only for EmoShelf's single main window and keep the old pointer.
+    let previous =
+        unsafe { SetWindowLongPtrW(hwnd, GWLP_WNDPROC, snap_window_proc as *const () as isize) };
+    if previous == 0 {
+        return Err("failed to install Windows hit-test procedure".to_string());
+    }
+    ORIGINAL_WNDPROC.store(previous, Ordering::Relaxed);
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn install_snap_layout_hit_test(_window: &tauri::Window) -> Result<(), String> {
+    Ok(())
+}
+
 /// メインウィンドウの表示 / 非表示を切り替える。
 fn toggle_main_window(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window("main") else {
@@ -38,6 +158,7 @@ fn toggle_main_window(app: &tauri::AppHandle) {
     if visible {
         let _ = window.hide();
     } else {
+        remember_foreground_target(app);
         let _ = window.show();
         let _ = window.set_focus();
     }
@@ -146,20 +267,44 @@ fn press_ctrl_v() -> Result<(), String> {
     result
 }
 
+#[cfg(windows)]
+fn focus_paste_target(app: &tauri::AppHandle) {
+    let target = app
+        .state::<PasteTarget>()
+        .0
+        .lock()
+        .ok()
+        .and_then(|guard| *guard);
+    if let Some(target) = target {
+        // SAFETY: The handle was captured from GetForegroundWindow. Windows validates stale handles.
+        let _ = unsafe { SetForegroundWindow(isize_to_hwnd(target)) };
+    }
+}
+
+#[cfg(not(windows))]
+fn focus_paste_target(_app: &tauri::AppHandle) {}
+
 /// ペイロードをペーストする: クリップボードへ書き込み → 自分を隠す →
 /// フォーカス復帰を待つ → Ctrl+V。Tauri の同期コマンドとして実行する
 ///（ブロッキングプール上で動くため短い sleep は問題ない）。
 #[tauri::command]
-fn paste_payload(app: tauri::AppHandle, payload: String) -> Result<(), String> {
+fn paste_payload(
+    app: tauri::AppHandle,
+    payload: String,
+    keep_open: Option<bool>,
+) -> Result<(), String> {
     if payload.is_empty() {
         return Err("payload must not be empty".to_string());
     }
     app.clipboard()
         .write_text(payload)
         .map_err(|e| e.to_string())?;
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.hide();
+    if !keep_open.unwrap_or(false) {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.hide();
+        }
     }
+    focus_paste_target(&app);
     std::thread::sleep(PASTE_FOCUS_WAIT);
     press_ctrl_v()
 }
@@ -168,10 +313,21 @@ fn paste_payload(app: tauri::AppHandle, payload: String) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .manage(ActiveShortcut(Mutex::new(None)))
+        .manage(PasteTarget(Mutex::new(None)))
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION
+                        | tauri_plugin_window_state::StateFlags::MAXIMIZED,
+                )
+                .build(),
+        )
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // 二重起動時は既存ウィンドウを前面に出すだけ
+            // 二重起動で呼び出した前面アプリも、貼り付け先として保持する。
+            remember_foreground_target(app);
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.set_focus();
@@ -186,6 +342,11 @@ pub fn run() {
                 })
                 .build(),
         )
+        .on_page_load(|window, _payload| {
+            if let Err(error) = install_snap_layout_hit_test(&window.window()) {
+                eprintln!("EmoShelf: native Snap Layout integration unavailable: {error}");
+            }
+        })
         .setup(|app| {
             // 設定読み込み前のフォールバックとして既定ショートカットを登録する。
             // 登録失敗でも起動は継続し、ActiveShortcut は成功時のみ更新する。
@@ -193,7 +354,8 @@ pub fn run() {
                 Ok(shortcut) => shortcut,
                 Err(_) => return Ok(()),
             };
-            if app.global_shortcut().register(shortcut).is_err() {
+            if let Err(error) = app.global_shortcut().register(shortcut) {
+                eprintln!("EmoShelf: default shortcut registration failed: {error}");
                 return Ok(());
             }
             let state = app.state::<ActiveShortcut>();

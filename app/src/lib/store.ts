@@ -1,145 +1,115 @@
-// EmoShelf の状態ストア（zustand）。
-// UI コンポーネントは持たない。データ操作・永続化・設定反映の基盤のみ。
-// 保存先・形式の仕様は app/docs/persistence.md、型は ./state.ts が正本。
-
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import {
   type AppState,
   type Board,
   createInitialState,
+  FutureStateVersionError,
+  type NewShelfItem,
+  parseAppState,
   type Settings,
   type ShelfItem,
-  STATE_SCHEMA_VERSION,
+  type TextShelfItem,
 } from "./state";
 
-/** 最近使った絵文字の最大保持件数。 */
 const MAX_RECENT = 30;
-/** 保存のデバウンス時間（連続操作時の書き込み抑制用）。 */
 const SAVE_DEBOUNCE_MS = 300;
-
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** ストアの状態から AppState 部分だけを抜き出して JSON 化する。 */
-function serialize(state: ShelfStore): string {
-  const snapshot: AppState = {
+function snapshotState(state: ShelfStore): AppState {
+  return {
     schemaVersion: state.schemaVersion,
     boards: state.boards,
     recent: state.recent,
     settings: state.settings,
     onboardingCompleted: state.onboardingCompleted,
+    appBoardMappings: state.appBoardMappings,
+    customAssets: state.customAssets,
+    extensions: state.extensions,
   };
-  return JSON.stringify(snapshot);
 }
 
-/** 保存をデバウンスして予約する。 */
+function serialize(state: ShelfStore): string {
+  return JSON.stringify(snapshotState(state));
+}
+
 function scheduleSave(state: ShelfStore): void {
+  if (state.persistenceBlocked) {
+    return;
+  }
   if (saveTimer !== null) {
     clearTimeout(saveTimer);
   }
   saveTimer = setTimeout(() => {
     saveTimer = null;
     invoke("save_state", { content: serialize(state) }).catch((error) => {
+      useShelfStore.setState({ saveError: String(error) });
       console.error("EmoShelf: state save failed", error);
     });
   }, SAVE_DEBOUNCE_MS);
 }
 
-/** 読み込んだ生データの形（検証前のため全フィールド unknown）。 */
-interface LoadedState {
-  schemaVersion?: unknown;
-  boards?: unknown;
-  recent?: unknown;
-  settings?: unknown;
-  onboardingCompleted?: unknown;
-}
-
-/** 読み込んだ生データを検証しながら初期状態へマージする。 */
-function mergeLoaded(raw: unknown): AppState {
-  const base = createInitialState();
-  if (typeof raw !== "object" || raw === null) {
-    return base;
-  }
-  const data = raw as LoadedState;
-  // スキーマ版が違うデータは将来の migrateState() で扱う。
-  // 現時点では安全のため初期状態で起動する。
-  if (data.schemaVersion !== STATE_SCHEMA_VERSION) {
-    return base;
-  }
-  return {
-    schemaVersion: STATE_SCHEMA_VERSION,
-    boards: Array.isArray(data.boards) ? (data.boards as Board[]) : base.boards,
-    recent: Array.isArray(data.recent)
-      ? (data.recent as AppState["recent"])
-      : base.recent,
-    settings: {
-      ...base.settings,
-      ...((data.settings as Partial<Settings>) ?? {}),
-    },
-    onboardingCompleted: data.onboardingCompleted === true,
-  };
-}
-
-/** ShelfItem の新規作成（id・利用状況は自動採番）。 */
-function createShelfItem(input: Omit<ShelfItem, "id" | "usage">): ShelfItem {
-  return {
-    ...input,
+function createShelfItem(input: NewShelfItem): ShelfItem {
+  const base = {
     id: crypto.randomUUID(),
-    usage: {
-      addedAt: new Date().toISOString(),
-      useCount: 0,
-    },
+    display: input.display,
+    usage: { addedAt: new Date().toISOString(), useCount: 0 },
   };
+  return input.type === "image"
+    ? { ...base, type: "image", assetId: input.assetId }
+    : { ...base, type: input.type, payload: input.payload };
+}
+
+function itemKey(item: ShelfItem): string {
+  return item.type === "image"
+    ? `image:${item.assetId}`
+    : `${item.type}:${item.payload}`;
+}
+
+function normalizeBoards(boards: Board[]): Board[] {
+  return boards.map((board, order) => ({ ...board, order }));
 }
 
 export interface ShelfStore extends AppState {
-  /** 起動時の読み込みが完了したかどうか。 */
   loaded: boolean;
-  /** 起動処理: 保存済み状態の読み込み＋ショートカット登録。 */
+  loadError?: string;
+  saveError?: string;
+  persistenceBlocked: boolean;
   initialize: () => Promise<void>;
-  /** 即時保存（終了時・テスト用）。 */
   persistNow: () => Promise<void>;
-  /** Board を追加して id を返す。 */
   addBoard: (name: string, icon?: string) => string;
-  /** Board 名を変更する。 */
   renameBoard: (boardId: string, name: string) => void;
-  /** Board アイコンを変更する。 */
   setBoardIcon: (boardId: string, icon: string | undefined) => void;
-  /** Board を削除する（最後の 1 枚は保護）。 */
+  reorderBoards: (fromIndex: number, toIndex: number) => void;
   removeBoard: (boardId: string) => void;
-  /** Board にアイテムを追加して id を返す。 */
-  addItemToBoard: (
-    boardId: string,
-    input: Omit<ShelfItem, "id" | "usage">,
-  ) => string | null;
-  /** Board からアイテムを外す。 */
+  restoreBoard: (board: Board, index: number) => void;
+  addItemToBoard: (boardId: string, input: NewShelfItem) => string | null;
   removeItemFromBoard: (boardId: string, itemId: string) => void;
-  /** 同一 Board 内でアイテムを並べ替える。 */
   moveItemWithinBoard: (
     boardId: string,
     fromIndex: number,
     toIndex: number,
   ) => void;
-  /** アイテムを別 Board へ移動する。 */
   moveItemToBoard: (
     fromBoardId: string,
     toBoardId: string,
     itemId: string,
   ) => void;
-  /** アイテムを別 Board へコピーする。 */
   copyItemToBoard: (
     fromBoardId: string,
     toBoardId: string,
     itemId: string,
   ) => void;
-  /** 使用を記録する（recent 更新＋使用回数加算）。 */
   recordUse: (payload: string) => void;
-  /** 設定を部分更新する（ショートカット変更時は再登録）。 */
+  recordItemUse: (item: ShelfItem) => void;
+  clearRecents: () => void;
   updateSettings: (partial: Partial<Settings>) => void;
-  /** オンボーディング完了を記録する。 */
+  setGlobalShortcut: (shortcut: string) => Promise<void>;
+  finishOnboarding: (items: NewShelfItem[]) => string;
   completeOnboarding: () => void;
-  /** ローカルデータを初期化する（設定の Reset 用）。 */
+  resetOnboarding: () => void;
   resetAll: () => void;
+  clearSaveError: () => void;
 }
 
 function withSave(
@@ -147,13 +117,14 @@ function withSave(
   get: () => ShelfStore,
   partial: Partial<ShelfStore>,
 ): void {
-  set(partial);
+  set({ ...partial, saveError: undefined });
   scheduleSave(get());
 }
 
 export const useShelfStore = create<ShelfStore>()((set, get) => ({
   ...createInitialState(),
   loaded: false,
+  persistenceBlocked: false,
 
   initialize: async () => {
     if (get().loaded) {
@@ -162,17 +133,23 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
     try {
       const raw = await invoke<string | null>("load_state");
       if (raw !== null) {
-        const merged = mergeLoaded(JSON.parse(raw) as unknown);
-        set({ ...merged, loaded: true });
+        const parsed = parseAppState(JSON.parse(raw) as unknown);
+        set({ ...parsed, loaded: true, loadError: undefined });
       } else {
         set({ loaded: true });
       }
     } catch (error) {
-      // 保存が読めなくても起動は止めない（初期状態で続行）
+      const blocked = error instanceof FutureStateVersionError;
+      set({
+        loaded: true,
+        persistenceBlocked: blocked,
+        loadError: blocked
+          ? "このデータは新しいEmoShelfで作成されています。上書きを防ぐため読み取り専用で起動しました。"
+          : "保存データを読み込めなかったため、初期状態で起動しました。",
+      });
       console.error("EmoShelf: state load failed", error);
-      set({ loaded: true });
     }
-    // 設定のショートカットを登録（失敗時は Rust 側の既定 Alt+E が生きる）
+
     try {
       await invoke("set_global_shortcut", {
         shortcut: get().settings.globalShortcut,
@@ -183,29 +160,37 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
   },
 
   persistNow: async () => {
+    if (get().persistenceBlocked) {
+      throw new Error("state persistence is blocked for a future schema");
+    }
     if (saveTimer !== null) {
       clearTimeout(saveTimer);
       saveTimer = null;
     }
     await invoke("save_state", { content: serialize(get()) });
+    set({ saveError: undefined });
   },
 
   addBoard: (name, icon) => {
     const board: Board = {
       id: crypto.randomUUID(),
-      name,
+      name: name.trim().slice(0, 48) || "Board",
       order: get().boards.length,
       items: [],
-      ...(icon !== undefined ? { icon } : {}),
+      ...(icon ? { icon } : {}),
     };
     withSave(set, get, { boards: [...get().boards, board] });
     return board.id;
   },
 
   renameBoard: (boardId, name) => {
+    const safeName = name.trim().slice(0, 48);
+    if (!safeName) {
+      return;
+    }
     withSave(set, get, {
       boards: get().boards.map((board) =>
-        board.id === boardId ? { ...board, name } : board,
+        board.id === boardId ? { ...board, name: safeName } : board,
       ),
     });
   },
@@ -218,23 +203,53 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
     });
   },
 
+  reorderBoards: (fromIndex, toIndex) => {
+    const boards = [...get().boards];
+    if (
+      fromIndex < 0 ||
+      fromIndex >= boards.length ||
+      toIndex < 0 ||
+      toIndex >= boards.length
+    ) {
+      return;
+    }
+    const [moved] = boards.splice(fromIndex, 1);
+    if (!moved) {
+      return;
+    }
+    boards.splice(toIndex, 0, moved);
+    withSave(set, get, { boards: normalizeBoards(boards) });
+  },
+
   removeBoard: (boardId) => {
     const boards = get().boards;
     if (boards.length <= 1) {
       return;
     }
-    withSave(set, get, {
-      boards: boards
-        .filter((board) => board.id !== boardId)
-        .map((board, index) => ({ ...board, order: index })),
-    });
+    const nextBoards = normalizeBoards(
+      boards.filter((board) => board.id !== boardId),
+    );
+    const settings =
+      get().settings.defaultBoardId === boardId
+        ? { ...get().settings, defaultBoardId: nextBoards[0]?.id }
+        : get().settings;
+    withSave(set, get, { boards: nextBoards, settings });
+  },
+
+  restoreBoard: (board, index) => {
+    const boards = [...get().boards];
+    boards.splice(Math.max(0, Math.min(index, boards.length)), 0, board);
+    withSave(set, get, { boards: normalizeBoards(boards) });
   },
 
   addItemToBoard: (boardId, input) => {
     const item = createShelfItem(input);
     let added = false;
     const boards = get().boards.map((board) => {
-      if (board.id !== boardId) {
+      if (
+        board.id !== boardId ||
+        board.items.some((entry) => itemKey(entry) === itemKey(item))
+      ) {
         return board;
       }
       added = true;
@@ -275,7 +290,7 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
         return board;
       }
       const [moved] = items.splice(fromIndex, 1);
-      if (moved === undefined) {
+      if (!moved) {
         return board;
       }
       items.splice(toIndex, 0, moved);
@@ -289,10 +304,15 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
       return;
     }
     const boards = get().boards;
-    const source = boards.find((board) => board.id === fromBoardId);
-    const targetExists = boards.some((board) => board.id === toBoardId);
-    const item = source?.items.find((entry) => entry.id === itemId);
-    if (source === undefined || !targetExists || item === undefined) {
+    const item = boards
+      .find((board) => board.id === fromBoardId)
+      ?.items.find((entry) => entry.id === itemId);
+    const target = boards.find((board) => board.id === toBoardId);
+    if (
+      !item ||
+      !target ||
+      target.items.some((entry) => itemKey(entry) === itemKey(item))
+    ) {
       return;
     }
     withSave(set, get, {
@@ -312,74 +332,151 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
   },
 
   copyItemToBoard: (fromBoardId, toBoardId, itemId) => {
-    const boards = get().boards;
-    const source = boards.find((board) => board.id === fromBoardId);
-    const targetExists = boards.some((board) => board.id === toBoardId);
-    const item = source?.items.find((entry) => entry.id === itemId);
-    if (source === undefined || !targetExists || item === undefined) {
+    const sourceItem = get()
+      .boards.find((board) => board.id === fromBoardId)
+      ?.items.find((entry) => entry.id === itemId);
+    if (!sourceItem) {
       return;
     }
-    const copied: ShelfItem = {
-      ...item,
-      id: crypto.randomUUID(),
-      usage: { addedAt: new Date().toISOString(), useCount: 0 },
-    };
-    withSave(set, get, {
-      boards: boards.map((board) =>
-        board.id === toBoardId
-          ? { ...board, items: [...board.items, copied] }
-          : board,
-      ),
-    });
+    const input: NewShelfItem =
+      sourceItem.type === "image"
+        ? {
+            type: "image",
+            assetId: sourceItem.assetId,
+            display: sourceItem.display,
+          }
+        : {
+            type: sourceItem.type,
+            payload: sourceItem.payload,
+            display: sourceItem.display,
+          };
+    get().addItemToBoard(toBoardId, input);
   },
 
   recordUse: (payload) => {
+    const item = get()
+      .boards.flatMap((board) => board.items)
+      .find(
+        (entry): entry is TextShelfItem =>
+          entry.type !== "image" && entry.payload === payload,
+      );
+    if (item) {
+      get().recordItemUse(item);
+      return;
+    }
     const now = new Date().toISOString();
-    const recent = [
-      { payload, usedAt: now },
-      ...get().recent.filter((entry) => entry.payload !== payload),
-    ].slice(0, MAX_RECENT);
-    const boards = get().boards.map((board) => ({
-      ...board,
-      items: board.items.map((item) =>
-        item.payload === payload
-          ? {
-              ...item,
-              usage: {
-                ...item.usage,
-                lastUsedAt: now,
-                useCount: item.usage.useCount + 1,
-              },
-            }
-          : item,
-      ),
-    }));
-    withSave(set, get, { recent, boards });
+    const recentEntry = {
+      id: `unicode:${payload}`,
+      type: "unicode" as const,
+      payload,
+      usedAt: now,
+    };
+    withSave(set, get, {
+      recent: [
+        recentEntry,
+        ...get().recent.filter((entry) => entry.payload !== payload),
+      ].slice(0, MAX_RECENT),
+    });
   },
 
+  recordItemUse: (item) => {
+    const now = new Date().toISOString();
+    const key = itemKey(item);
+    const recentEntry =
+      item.type === "image"
+        ? { id: key, type: item.type, assetId: item.assetId, usedAt: now }
+        : { id: key, type: item.type, payload: item.payload, usedAt: now };
+    const boards = get().boards.map((board) => ({
+      ...board,
+      items: board.items.map((entry) =>
+        itemKey(entry) === key
+          ? {
+              ...entry,
+              usage: {
+                ...entry.usage,
+                lastUsedAt: now,
+                useCount: get().settings.usageTrackingEnabled
+                  ? entry.usage.useCount + 1
+                  : entry.usage.useCount,
+              },
+            }
+          : entry,
+      ),
+    }));
+    withSave(set, get, {
+      recent: [
+        recentEntry,
+        ...get().recent.filter((entry) => entry.id !== key),
+      ].slice(0, MAX_RECENT),
+      boards,
+    });
+  },
+
+  clearRecents: () => withSave(set, get, { recent: [] }),
+
   updateSettings: (partial) => {
-    const settings = { ...get().settings, ...partial };
-    withSave(set, get, { settings });
-    if (partial.globalShortcut !== undefined) {
-      invoke("set_global_shortcut", {
-        shortcut: settings.globalShortcut,
-      }).catch((error) => {
-        console.error("EmoShelf: shortcut register failed", error);
-      });
+    const { globalShortcut, ...immediate } = partial;
+    if (Object.keys(immediate).length > 0) {
+      withSave(set, get, { settings: { ...get().settings, ...immediate } });
+    }
+    if (
+      globalShortcut !== undefined &&
+      globalShortcut !== get().settings.globalShortcut
+    ) {
+      void get().setGlobalShortcut(globalShortcut);
     }
   },
 
-  completeOnboarding: () => {
-    withSave(set, get, { onboardingCompleted: true });
+  setGlobalShortcut: async (shortcut) => {
+    const normalized = shortcut.trim();
+    await invoke("set_global_shortcut", { shortcut: normalized });
+    withSave(set, get, {
+      settings: { ...get().settings, globalShortcut: normalized },
+    });
   },
+
+  finishOnboarding: (inputs) => {
+    const id = crypto.randomUUID();
+    const board: Board = {
+      id,
+      name: "My Shelf",
+      icon: "✨",
+      order: 0,
+      items: inputs.map(createShelfItem),
+    };
+    withSave(set, get, {
+      boards: [board],
+      onboardingCompleted: true,
+      settings: { ...get().settings, defaultBoardId: id },
+    });
+    return id;
+  },
+
+  completeOnboarding: () => {
+    if (get().boards.length === 0) {
+      get().finishOnboarding([]);
+    } else {
+      withSave(set, get, { onboardingCompleted: true });
+    }
+  },
+
+  resetOnboarding: () => withSave(set, get, { onboardingCompleted: false }),
 
   resetAll: () => {
     const initial = createInitialState();
-    withSave(set, get, { ...initial });
-    invoke("set_global_shortcut", {
+    set({
+      ...initial,
+      loadError: undefined,
+      saveError: undefined,
+      persistenceBlocked: false,
+    });
+    scheduleSave(get());
+    void invoke("set_global_shortcut", {
       shortcut: initial.settings.globalShortcut,
     }).catch((error) => {
       console.error("EmoShelf: shortcut register failed", error);
     });
   },
+
+  clearSaveError: () => set({ saveError: undefined }),
 }));

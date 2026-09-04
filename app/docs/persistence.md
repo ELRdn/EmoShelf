@@ -1,26 +1,27 @@
-# EmoShelf 永続化フォーマット（Phase 0 基準）
+# EmoShelf 永続化フォーマット（schema v2）
 
 ローカルファーストが原則。コア利用にアカウント・クラウド同期は不要。
 
 ## 保存場所
 
-| 用途         | 場所（Tauri 規約）              | ファイル名    |
-| ------------ | ------------------------------- | ------------- |
-| アプリ状態   | `appLocalData` (`AppData/...`)  | `state.json`  |
-| 設定バックアップ | ユーザー指定（Export 時のみ） | `emoshelf-*.json` |
+| 用途 | 場所（Tauri 規約） | ファイル名 |
+| --- | --- | --- |
+| アプリ状態 | `appLocalData` (`AppData/...`) | `state.json` |
+| 自動バックアップ | 同上 | `state.json.bak` |
 
-開発時（`pnpm tauri dev`）は WebView の `localStorage` に同一スキーマで
-保持してもよいが、正規の保存先は上記の JSON ファイルとする。
+正規の保存先はRust側が管理する上記JSONファイルとする。
 
 ## ファイル形式
 
-- UTF-8 の JSON、1 ファイル = `AppState` 1 件
-- TypeScript の正本は `src/lib/state.ts`
-- 先頭に必ず `schemaVersion`（現在 `1`）を含める
+- UTF-8のJSON、1ファイル = `AppState` 1件
+- TypeScriptの正本は`src/lib/state.ts`
+- 先頭に必ず`schemaVersion`（現在`2`）を含める
+- schema v1は初回読込時にv2へ移行する
+- v2より新しいデータは上書きせず、読み取り専用で安全に停止する
 
 ```jsonc
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "boards": [
     {
       "id": "b_my_shelf",
@@ -39,7 +40,7 @@
             "keywords": ["cry", "tear", "sad"]
           },
           "usage": {
-            "addedAt": "2026-09-03T12:00:00.000Z",
+            "addedAt": "2026-09-04T12:00:00.000Z",
             "useCount": 0
           }
         }
@@ -50,27 +51,58 @@
   "settings": {
     "renderer": "twemoji",
     "theme": "system",
+    "locale": "system",
     "selectionBehavior": "paste-close",
     "pinned": false,
     "globalShortcut": "Alt+E",
-    "windowSize": { "width": 800, "height": 600 }
+    "windowSize": { "width": 880, "height": 660 },
+    "reducedMotion": "system",
+    "autostartEnabled": false,
+    "usageTrackingEnabled": true,
+    "shelfGlowEnabled": false,
+    "perAppBoardsEnabled": false,
+    "popupPosition": "cursor-monitor"
   },
-  "onboardingCompleted": false
+  "onboardingCompleted": false,
+  "appBoardMappings": {},
+  "customAssets": [],
+  "extensions": {}
 }
 ```
 
+## 項目の型
+
+`ShelfItem`は`type`で判別するUnionで、v2では次を予約・検証する。
+
+| type | 本文 | 用途 |
+| --- | --- | --- |
+| `unicode` | `payload` | 単一Unicode絵文字 |
+| `sequence` | `payload` | 複数絵文字シーケンス |
+| `symbol` | `payload` | 記号・テキスト |
+| `image` | `assetId` | アプリ管理下のカスタム画像 |
+
+`recent`も同じ型付き参照を使い、画像の外部元パスは保持しない。
+
+## v1 → v2移行
+
+- 既存Board、item ID、並び順、Recent、Settings、オンボーディング状態を保持する
+- v1のテキスト項目は`unicode`項目として正規化する
+- v2で追加された設定には安全な既定値を補う
+- 未知のトップレベルフィールドは`extensions`へ保持する
+- 移行後の保存もRustのアトミック保存と`.bak`保護を使う
+
 ## ルール
 
-1. **読み書きはアトミックに** — 一時ファイルへ書いてから rename する。
-2. **未知フィールドは保持** — 将来バージョンのデータを開いても落とさない。
-3. **破損時は起動を止めない** — バックアップ（`state.json.bak`）から復元を試み、
-   駄目なら初期状態で起動して Toast で通知する。
-4. **マイグレーションは `schemaVersion` で分岐** — 関数 `migrateState(raw)` に集約し、
-   バージョンごとに小さな変換関数を足していく。
-5. **使用統計は端末外に出さない** — `usage` / `recent` は解析送信の対象外。
+1. **読み書きはアトミックに** — 一時ファイルへ書いてからrenameする。
+2. **未知フィールドは保持** — 既知schema内の拡張値を`extensions`へ保持する。
+3. **未来schemaは上書き禁止** — 対応版より新しいデータでは永続化を停止する。
+4. **破損時は起動を止めない** — `.bak`から復元し、失敗時は初期状態と通知を使う。
+5. **マイグレーションは一方向** — `parseAppState`内でv1からv2へ一度だけ変換する。
+6. **使用統計は端末外に出さない** — `usage` / `recent`を解析送信しない。
 
 ## バージョン履歴
 
-| schemaVersion | 内容                |
-| ------------- | ------------------- |
-| 1             | Phase 0 初版（v0.1 前提） |
+| schemaVersion | 内容 |
+| --- | --- |
+| 1 | Phase 0初版 |
+| 2 | 判別可能ShelfItem、型付きRecent、追加設定、アプリ別Board・カスタムアセット領域 |
