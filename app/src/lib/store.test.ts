@@ -76,4 +76,69 @@ describe("shelf store", () => {
 
     expect(useShelfStore.getState().settings.globalShortcut).toBe("Alt+E");
   });
+
+  it("saves and edits a reusable emoji sequence", () => {
+    const boardId = useShelfStore.getState().addBoard("Sequences", "✨");
+    const itemId = useShelfStore
+      .getState()
+      .saveSequence(boardId, "😭🙏", "Please");
+
+    expect(itemId).toBeTruthy();
+    expect(useShelfStore.getState().boards[0]?.items[0]).toMatchObject({
+      id: itemId,
+      type: "sequence",
+      payload: "😭🙏",
+      display: { name: "Please" },
+    });
+
+    expect(
+      useShelfStore
+        .getState()
+        .editSequence(boardId, itemId ?? "", "👀🍿", "Watching"),
+    ).toBe(true);
+    expect(useShelfStore.getState().boards[0]?.items[0]).toMatchObject({
+      payload: "👀🍿",
+      display: { name: "Watching" },
+    });
+  });
+
+  it("replaces imported state only after immediately persisting it", async () => {
+    const incoming = createInitialState();
+    incoming.onboardingCompleted = true;
+    incoming.boards = [
+      { id: "imported", name: "Imported", order: 0, items: [] },
+    ];
+
+    await useShelfStore.getState().applyImportedState(incoming, "replace");
+
+    expect(invoke).toHaveBeenCalledWith("save_state", {
+      content: expect.stringContaining('"name":"Imported"'),
+    });
+    expect(useShelfStore.getState().boards[0]?.name).toBe("Imported");
+  });
+
+  it("restores the previous shortcut when a replace import cannot be saved", async () => {
+    const incoming = createInitialState();
+    incoming.settings.globalShortcut = "Ctrl+Shift+E";
+    incoming.boards = [
+      { id: "imported", name: "Imported", order: 0, items: [] },
+    ];
+    mockedInvoke
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("disk full"))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(
+      useShelfStore.getState().applyImportedState(incoming, "replace"),
+    ).rejects.toThrow("disk full");
+
+    expect(mockedInvoke).toHaveBeenNthCalledWith(1, "set_global_shortcut", {
+      shortcut: "Ctrl+Shift+E",
+    });
+    expect(mockedInvoke).toHaveBeenNthCalledWith(3, "set_global_shortcut", {
+      shortcut: "Alt+E",
+    });
+    expect(useShelfStore.getState().settings.globalShortcut).toBe("Alt+E");
+    expect(useShelfStore.getState().boards).toEqual([]);
+  });
 });

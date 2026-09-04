@@ -103,7 +103,7 @@ const usageSchema = z
     lastUsedAt: z.string().optional(),
     useCount: z.number().int().nonnegative(),
   })
-  .strict();
+  .passthrough();
 
 const displaySchema = z
   .object({
@@ -112,7 +112,7 @@ const displaySchema = z
     category: z.string().optional(),
     keywords: z.array(z.string()),
   })
-  .strict();
+  .passthrough();
 
 const textItemFields = {
   id: z.string().min(1),
@@ -122,9 +122,9 @@ const textItemFields = {
 };
 
 const shelfItemSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("unicode"), ...textItemFields }).strict(),
-  z.object({ type: z.literal("sequence"), ...textItemFields }).strict(),
-  z.object({ type: z.literal("symbol"), ...textItemFields }).strict(),
+  z.object({ type: z.literal("unicode"), ...textItemFields }).passthrough(),
+  z.object({ type: z.literal("sequence"), ...textItemFields }).passthrough(),
+  z.object({ type: z.literal("symbol"), ...textItemFields }).passthrough(),
   z
     .object({
       type: z.literal("image"),
@@ -133,7 +133,7 @@ const shelfItemSchema = z.discriminatedUnion("type", [
       display: displaySchema,
       usage: usageSchema,
     })
-    .strict(),
+    .passthrough(),
 ]);
 
 const boardSchema = z
@@ -144,7 +144,7 @@ const boardSchema = z
     order: z.number().int().nonnegative(),
     items: z.array(shelfItemSchema),
   })
-  .strict();
+  .passthrough();
 
 const recentSchema = z
   .object({
@@ -154,6 +154,7 @@ const recentSchema = z
     assetId: z.string().optional(),
     usedAt: z.string(),
   })
+  .passthrough()
   .superRefine((entry, context) => {
     if (entry.type === "image" && entry.assetId === undefined) {
       context.addIssue({
@@ -180,7 +181,7 @@ const customAssetSchema = z
     sha256: z.string().min(1),
     addedAt: z.string(),
   })
-  .strict();
+  .passthrough();
 
 const settingsSchema = z
   .object({
@@ -193,7 +194,7 @@ const settingsSchema = z
     defaultBoardId: z.string().optional(),
     windowSize: z
       .object({ width: z.number().positive(), height: z.number().positive() })
-      .strict(),
+      .passthrough(),
     reducedMotion: z.boolean(),
     autostart: z.boolean(),
     usageTrackingEnabled: z.boolean(),
@@ -201,7 +202,7 @@ const settingsSchema = z
     perAppBoardsEnabled: z.boolean(),
     popupPositionBehavior: z.enum(["active-monitor", "remember-last"]),
   })
-  .strict();
+  .passthrough();
 
 const stateV2Schema = z
   .object({

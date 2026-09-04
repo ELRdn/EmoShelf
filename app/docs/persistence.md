@@ -56,12 +56,12 @@
     "pinned": false,
     "globalShortcut": "Alt+E",
     "windowSize": { "width": 880, "height": 660 },
-    "reducedMotion": "system",
-    "autostartEnabled": false,
+    "reducedMotion": false,
+    "autostart": false,
     "usageTrackingEnabled": true,
-    "shelfGlowEnabled": false,
+    "shelfGlow": false,
     "perAppBoardsEnabled": false,
-    "popupPosition": "cursor-monitor"
+    "popupPositionBehavior": "active-monitor"
   },
   "onboardingCompleted": false,
   "appBoardMappings": {},
@@ -106,3 +106,20 @@
 | --- | --- |
 | 1 | Phase 0初版 |
 | 2 | 判別可能ShelfItem、型付きRecent、追加設定、アプリ別Board・カスタムアセット領域 |
+
+## `.emoshelf`交換形式
+
+`.emoshelf`はZIPコンテナで、v0.2では次の2ファイルを必須とする。
+
+| Entry | 内容 |
+| --- | --- |
+| `manifest.json` | format/version、state schema、Export日時、アプリ版 |
+| `state.json` | 検証済みの`AppState` |
+
+- container formatは`1`、state schemaは現時点で`1`または`2`を受理する
+- 64MiB超のcontainer、8MiB超のstate、128件超のentryを拒否する
+- 絶対パス、親脱出、NUL、シンボリックリンク、未知entryを拒否する
+- future schema、manifest/state不一致、不正JSONは適用前に拒否する
+- MergeはBoard/item IDを再割り当てし、ローカル設定を維持する
+- Replaceは現在の`state.json`を`.bak`へ退避してから即時保存する
+- `assets/`と`licenses/`は形式上予約済み。Custom Asset実装前のv0.2はasset入りを拒否する

@@ -21,3 +21,17 @@ independent from these graphics.
 
 The complete dependency license inventory will be regenerated and audited for
 the v1.0 release package.
+
+## Optional renderer packs (not bundled in v0.2)
+
+The following renderers are shown in the application as unavailable until the
+signed Renderer Pack system is delivered. Their artwork is not distributed in
+the v0.2 application package.
+
+- Fluent Emoji graphics — Microsoft, MIT License
+- Noto Emoji SVG/image resources — Google, Apache License 2.0; the font files
+  use the SIL Open Font License 1.1
+- OpenMoji graphics — OpenMoji contributors, CC BY-SA 4.0; related code uses
+  LGPL-3.0
+
+Each future pack must carry its exact upstream license and attribution files.

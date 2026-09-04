@@ -8,6 +8,13 @@ import type { Settings } from "./state";
 /** ペースト結果。呼び出し側（将来の Toast 等）が利用する。 */
 export type PasteOutcome = "pasted" | "copied";
 
+export async function copyPayload(payload: string): Promise<void> {
+  if (payload === "") {
+    throw new Error("payload must not be empty");
+  }
+  await writeText(payload);
+}
+
 /**
  * ペイロードを送り出す。
  * - "copy-only" 設定なら最初からコピーのみ

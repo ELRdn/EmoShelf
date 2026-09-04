@@ -1,6 +1,8 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
+import { ComposeTray } from "./components/ComposeTray";
+import { DataTransferDialog } from "./components/DataTransferDialog";
 import { EmojiArtwork } from "./components/EmojiArtwork";
 import { Onboarding } from "./components/Onboarding";
 import { ShelfGrid } from "./components/ShelfGrid";
@@ -15,12 +17,19 @@ import {
   toDisplayMetadata,
 } from "./lib/emoji";
 import { resolveLocale, translate } from "./lib/i18n";
-import { pastePayload } from "./lib/paste";
+import { copyPayload, pastePayload } from "./lib/paste";
 import type { ShelfItem } from "./lib/state";
-import { useShelfStore } from "./lib/store";
+import { snapshotState, useShelfStore } from "./lib/store";
 
 type CategoryId = number | "all" | "recent";
-type Modal = "new-board" | "rename-board" | "delete-board" | "settings" | null;
+type Modal =
+  | "new-board"
+  | "rename-board"
+  | "delete-board"
+  | "save-sequence"
+  | "edit-sequence"
+  | "settings"
+  | null;
 
 interface Selection {
   payload: string;
@@ -31,6 +40,7 @@ interface Selection {
   shortcode?: string;
   hexcode?: string;
   itemId?: string;
+  itemType?: ShelfItem["type"];
   source: "shelf" | "catalog";
 }
 
@@ -66,6 +76,7 @@ function selectionFromItem(item: ShelfItem, locale: AppLocale): Selection {
     shortcode: catalog?.shortcode,
     hexcode: catalog?.hexcode,
     itemId: item.id,
+    itemType: item.type,
     source: "shelf",
   };
 }
@@ -88,7 +99,7 @@ function TitleBar({
         </span>
         <strong data-tauri-drag-region>EmoShelf</strong>
         <span className="version-pill" data-tauri-drag-region>
-          v0.1
+          v0.2
         </span>
       </div>
       <div className="window-controls">
@@ -204,6 +215,10 @@ function App() {
   const [shortcutDraft, setShortcutDraft] = useState(settings.globalShortcut);
   const [shortcutError, setShortcutError] = useState("");
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [composition, setComposition] = useState<string[]>([]);
+  const [sequenceName, setSequenceName] = useState("");
+  const [sequenceDraft, setSequenceDraft] = useState("");
   const [toast, setToast] = useState<ToastState>();
   const toastId = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -229,6 +244,14 @@ function App() {
       ? catalog
       : catalog.filter((entry) => entry.group === category);
   }, [catalog, category, locale, query, recent]);
+  const navigableSelections = useMemo(
+    () =>
+      catalogMode
+        ? catalogEntries.map(selectionFromCatalog)
+        : (activeBoard?.items.map((item) => selectionFromItem(item, locale)) ??
+          []),
+    [activeBoard, catalogEntries, catalogMode, locale],
+  );
 
   const showToast = useCallback(
     (message: string, action?: ToastState["action"]) => {
@@ -287,6 +310,69 @@ function App() {
     [locale, settings.pinned, settings.selectionBehavior, showToast],
   );
 
+  const pasteComposition = useCallback(
+    async (forceKeepOpen = false) => {
+      const payload = composition.join("");
+      if (!payload) {
+        return;
+      }
+      const keepOpen =
+        forceKeepOpen ||
+        settings.pinned ||
+        settings.selectionBehavior === "paste-keep-open";
+      const outcome = await pastePayload(
+        payload,
+        settings.selectionBehavior,
+        keepOpen,
+      );
+      useShelfStore.getState().recordUse(payload, "sequence");
+      if (outcome === "copied") {
+        showToast(translate(locale, "copied"));
+      }
+    },
+    [
+      composition,
+      locale,
+      settings.pinned,
+      settings.selectionBehavior,
+      showToast,
+    ],
+  );
+
+  const moveKeyboardSelection = useCallback(
+    (direction: "left" | "right" | "up" | "down") => {
+      if (!navigableSelections.length) {
+        return;
+      }
+      const currentIndex = navigableSelections.findIndex((entry) =>
+        selection?.itemId
+          ? entry.itemId === selection.itemId
+          : entry.payload === selection?.payload,
+      );
+      const columns = Math.max(
+        4,
+        Math.floor(Math.max(320, window.innerWidth - 290) / 72),
+      );
+      const delta =
+        direction === "left"
+          ? -1
+          : direction === "right"
+            ? 1
+            : direction === "up"
+              ? -columns
+              : columns;
+      const nextIndex = Math.max(
+        0,
+        Math.min(
+          navigableSelections.length - 1,
+          currentIndex < 0 ? 0 : currentIndex + delta,
+        ),
+      );
+      setSelection(navigableSelections[nextIndex]);
+    },
+    [navigableSelections, selection],
+  );
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.key.toLowerCase() === "f") {
@@ -324,7 +410,36 @@ function App() {
         }
         return;
       }
-      if (event.key === "Enter" && selection && !modal) {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.matches("input, textarea, select, [contenteditable='true']")
+      ) {
+        return;
+      }
+      const direction =
+        event.key === "ArrowLeft"
+          ? "left"
+          : event.key === "ArrowRight"
+            ? "right"
+            : event.key === "ArrowUp"
+              ? "up"
+              : event.key === "ArrowDown"
+                ? "down"
+                : null;
+      if (direction && !modal) {
+        event.preventDefault();
+        moveKeyboardSelection(direction);
+        return;
+      }
+      if (event.key === "Enter" && !modal) {
+        if (composeOpen && composition.length && !event.ctrlKey) {
+          event.preventDefault();
+          void pasteComposition();
+          return;
+        }
+        if (!selection) {
+          return;
+        }
         event.preventDefault();
         if (event.ctrlKey && selection.source === "catalog" && activeBoard) {
           const entry = findByEmoji(selection.payload, locale);
@@ -354,8 +469,12 @@ function App() {
     activeBoard,
     boards,
     catalogMode,
+    composeOpen,
+    composition.length,
     locale,
     modal,
+    moveKeyboardSelection,
+    pasteComposition,
     pasteSelection,
     query,
     selection,
@@ -403,16 +522,31 @@ function App() {
     );
   }
 
+  const addPayloadToComposition = (payload: string) => {
+    setComposeOpen(true);
+    setComposition((current) =>
+      current.length >= 32 ? current : [...current, payload],
+    );
+  };
+
   const selectShelfItem = (item: ShelfItem) => {
     const next = selectionFromItem(item, locale);
     setSelection(next);
+    if (composeOpen && item.type !== "image") {
+      addPayloadToComposition(item.payload);
+      return;
+    }
     if (!editMode) {
       void pasteSelection(next);
     }
   };
 
-  const selectCatalogEntry = (entry: CatalogEntry) =>
+  const selectCatalogEntry = (entry: CatalogEntry) => {
     setSelection(selectionFromCatalog(entry));
+    if (composeOpen) {
+      addPayloadToComposition(entry.emoji);
+    }
+  };
 
   const addSelectionToBoard = (boardId: string) => {
     if (!selection) {
@@ -457,6 +591,25 @@ function App() {
         setActiveBoardId(deleted.id);
       },
     });
+  };
+
+  const openSaveSequence = () => {
+    const payload = composition.join("");
+    if (!payload) {
+      return;
+    }
+    setSequenceDraft(payload);
+    setSequenceName("");
+    setModal("save-sequence");
+  };
+
+  const openEditSequence = () => {
+    if (selection?.itemType !== "sequence") {
+      return;
+    }
+    setSequenceDraft(selection.payload);
+    setSequenceName(selection.name);
+    setModal("edit-sequence");
   };
 
   return (
@@ -575,6 +728,19 @@ function App() {
             </button>
           </nav>
           <div className="shelf-tools">
+            <button
+              aria-pressed={composeOpen}
+              className={
+                composeOpen ? "compose-toggle is-active" : "compose-toggle"
+              }
+              onClick={() => setComposeOpen((open) => !open)}
+              type="button"
+            >
+              ✦ {translate(locale, "compose")}
+              {composition.length ? (
+                <span className="tool-count">{composition.length}</span>
+              ) : null}
+            </button>
             <button
               className={editMode ? "is-active" : ""}
               onClick={() => setEditMode((editing) => !editing)}
@@ -750,6 +916,23 @@ function App() {
                   </div>
                 </dl>
                 <div className="detail-actions">
+                  <button
+                    className="compose-action"
+                    onClick={() => addPayloadToComposition(selection.payload)}
+                    type="button"
+                  >
+                    ✦ {translate(locale, "addToCompose")}
+                  </button>
+                  {selection.source === "shelf" &&
+                  selection.itemType === "sequence" ? (
+                    <button
+                      className="quiet-button"
+                      onClick={openEditSequence}
+                      type="button"
+                    >
+                      {translate(locale, "editSequence")}
+                    </button>
+                  ) : null}
                   {selection.source === "catalog" && activeBoard ? (
                     <button
                       className="shelf-action"
@@ -826,6 +1009,24 @@ function App() {
             )}
           </aside>
         </section>
+
+        {composeOpen ? (
+          <ComposeTray
+            entries={composition}
+            locale={locale}
+            onClear={() => setComposition([])}
+            onClose={() => setComposeOpen(false)}
+            onCopy={() =>
+              void copyPayload(composition.join(""))
+                .then(() => showToast(translate(locale, "copied")))
+                .catch((error) => showToast(String(error)))
+            }
+            onPaste={() => void pasteComposition()}
+            onSave={openSaveSequence}
+            onUndo={() => setComposition((current) => current.slice(0, -1))}
+            renderer={settings.renderer}
+          />
+        ) : null}
 
         <section className="context-footer" aria-label="Selection actions">
           <div className="selection-summary">
@@ -1010,6 +1211,111 @@ function App() {
         </ModalShell>
       ) : null}
 
+      {modal === "save-sequence" && activeBoard ? (
+        <ModalShell
+          onClose={() => setModal(null)}
+          title={translate(locale, "saveSequence")}
+        >
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const itemId = useShelfStore
+                .getState()
+                .saveSequence(activeBoard.id, sequenceDraft, sequenceName);
+              if (itemId) {
+                showToast(translate(locale, "saved"));
+                setModal(null);
+              }
+            }}
+          >
+            <label className="form-field">
+              <span>{translate(locale, "sequenceName")}</span>
+              <input
+                maxLength={48}
+                onChange={(event) => setSequenceName(event.target.value)}
+                placeholder={sequenceDraft}
+                value={sequenceName}
+              />
+            </label>
+            <label className="form-field">
+              <span>{translate(locale, "sequenceContents")}</span>
+              <textarea
+                maxLength={256}
+                onChange={(event) => setSequenceDraft(event.target.value)}
+                required
+                rows={3}
+                value={sequenceDraft}
+              />
+            </label>
+            <div className="modal-actions">
+              <button onClick={() => setModal(null)} type="button">
+                {translate(locale, "cancel")}
+              </button>
+              <button className="primary-button" type="submit">
+                {translate(locale, "saveSequence")}
+              </button>
+            </div>
+          </form>
+        </ModalShell>
+      ) : null}
+
+      {modal === "edit-sequence" && activeBoard && selection?.itemId ? (
+        <ModalShell
+          onClose={() => setModal(null)}
+          title={translate(locale, "editSequence")}
+        >
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const changed = useShelfStore
+                .getState()
+                .editSequence(
+                  activeBoard.id,
+                  selection.itemId ?? "",
+                  sequenceDraft,
+                  sequenceName,
+                );
+              if (changed) {
+                setSelection({
+                  ...selection,
+                  payload: sequenceDraft.trim(),
+                  name: sequenceName.trim() || sequenceDraft.trim(),
+                });
+                showToast(translate(locale, "saved"));
+                setModal(null);
+              }
+            }}
+          >
+            <label className="form-field">
+              <span>{translate(locale, "sequenceName")}</span>
+              <input
+                maxLength={48}
+                onChange={(event) => setSequenceName(event.target.value)}
+                value={sequenceName}
+              />
+            </label>
+            <label className="form-field">
+              <span>{translate(locale, "sequenceContents")}</span>
+              <textarea
+                maxLength={256}
+                onChange={(event) => setSequenceDraft(event.target.value)}
+                required
+                rows={3}
+                value={sequenceDraft}
+              />
+            </label>
+            <div className="modal-actions">
+              <button onClick={() => setModal(null)} type="button">
+                {translate(locale, "cancel")}
+              </button>
+              <button className="primary-button" type="submit">
+                {translate(locale, "saved")}
+              </button>
+            </div>
+          </form>
+        </ModalShell>
+      ) : null}
+
       {modal === "settings" ? (
         <ModalShell
           onClose={() => setModal(null)}
@@ -1058,8 +1364,27 @@ function App() {
               >
                 <option value="twemoji">Twemoji</option>
                 <option value="native">Native / System</option>
+                <option disabled value="fluent">
+                  Fluent Emoji — {translate(locale, "unavailableRenderer")}
+                </option>
+                <option disabled value="noto">
+                  Noto Emoji — {translate(locale, "unavailableRenderer")}
+                </option>
+                <option disabled value="openmoji">
+                  OpenMoji — {translate(locale, "unavailableRenderer")}
+                </option>
               </select>
             </label>
+            <details className="renderer-attributions">
+              <summary>{translate(locale, "rendererAttributions")}</summary>
+              <ul>
+                <li>Twemoji — CC BY 4.0 / package code MIT</li>
+                <li>Native / System — operating system fonts</li>
+                <li>Fluent Emoji — MIT (external pack, not installed)</li>
+                <li>Noto Emoji — Apache-2.0 (external pack, not installed)</li>
+                <li>OpenMoji — CC BY-SA 4.0 (external pack, not installed)</li>
+              </ul>
+            </details>
             <label className="form-field">
               <span>{translate(locale, "behavior")}</span>
               <select
@@ -1137,6 +1462,19 @@ function App() {
                 </p>
               ) : null}
             </form>
+            <DataTransferDialog
+              locale={locale}
+              onApply={async (state, mode) => {
+                await useShelfStore.getState().applyImportedState(state, mode);
+                setActiveBoardId(
+                  useShelfStore.getState().settings.defaultBoardId ??
+                    useShelfStore.getState().boards[0]?.id,
+                );
+                setSelection(undefined);
+                showToast(translate(locale, "importComplete"));
+              }}
+              state={snapshotState(useShelfStore.getState())}
+            />
             <div className="settings-danger-zone">
               <button
                 className="quiet-button"

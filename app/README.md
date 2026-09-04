@@ -4,6 +4,9 @@ EmoShelf 本体の Tauri 2 + React + TypeScript プロジェクト。
 製品概要はルートの [`README.md`](../README.md)、
 画面仕様は [`DESIGN.md`](../DESIGN.md)、全体計画は [`ROADMAP.md`](../ROADMAP.md) を参照。
 
+Concept 2.5準拠のShelf UI、Compose Tray、sequence、キーボード操作、
+`.emoshelf` Import/Exportまで実装済みです。
+
 ## 前提ツール
 
 | ツール | 目安バージョン | 備考                    |
@@ -23,7 +26,7 @@ cd app
 pnpm install     # 依存インストール
 pnpm dev         # Vite のみ起動（UI 確認用）
 pnpm tauri dev   # デスクトップアプリとして起動
-pnpm check       # 型チェック + Biome + Vitest（13件）
+pnpm check       # 型チェック + Biome + Vitest（21件）
 pnpm test        # Vitest / React Testing Library / axe のみ実行
 pnpm build       # 本番フロントビルド
 pnpm tauri build # Windows インストーラー（NSIS / MSI）を生成
@@ -45,13 +48,14 @@ cargo check --locked                 # lockfile 固定でコンパイル確認
 app/
 ├── src/
 │   ├── App.tsx        # Shelf UI、オンボーディング、設定、キーボード操作
-│   ├── components/    # 仮想化グリッド、Shelf D&D、Twemoji表示
+│   ├── components/    # 仮想化、Shelf D&D、Twemoji、Compose、Import/Export
 │   ├── test/          # Vitest共通セットアップ
 │   └── lib/
 │       ├── state.ts   # アプリ状態モデル（正本）
 │       ├── store.ts   # zustand ストア（操作・永続化・設定反映）
 │       ├── emoji.ts   # 絵文字カタログ読み込み・検索
 │       ├── paste.ts   # ペースト実行＋コピーフォールバック
+│       ├── transfer.ts # .emoshelf交換と安全なMerge
 │       └── i18n.ts    # 日本語／英語UI文言
 ├── docs/
 │   └── persistence.md # 永続化フォーマット定義
@@ -80,9 +84,12 @@ app/
 | `save_state` | アトミック保存（旧ファイルは `.bak` へ退避） |
 | `set_global_shortcut` | グローバルショートカット差し替え |
 | `paste_payload` | クリップボード書き込み → 対象へフォーカス復帰 → Ctrl+V |
+| `export_emoshelf` | schema v2状態を検証して`.emoshelf` ZIPへ保存 |
+| `preview_emoshelf` | ZIPを安全に検証し、適用前プレビューを返す |
 
 使用プラグイン: `global-shortcut`（表示切替）・`clipboard-manager`（書き込み）・
-`single-instance`（二重起動抑止）・`window-state`（サイズ/位置の自動復元）。
+`dialog`（Import/Export先の選択）・`single-instance`（二重起動抑止）・
+`window-state`（サイズ/位置の自動復元）。
 ペーストのキー送出には `enigo` を使用。
 
 Twemojiの帰属とライセンスはルートの

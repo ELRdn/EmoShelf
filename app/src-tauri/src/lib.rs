@@ -6,6 +6,7 @@
 //
 // 仕様の正本は app/docs/persistence.md。
 
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -17,6 +18,8 @@ use std::sync::atomic::{AtomicIsize, Ordering};
 use tauri::Manager;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+use zip::write::SimpleFileOptions;
+use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 #[cfg(windows)]
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
@@ -40,6 +43,31 @@ const STATE_TMP_EXTENSION: &str = "json.tmp";
 const PASTE_FOCUS_WAIT: Duration = Duration::from_millis(120);
 /// 既定のグローバルショートカット（設定読み込み前のフォールバック）。
 const DEFAULT_SHORTCUT: &str = "alt+e";
+/// `.emoshelf` container format and supported application state versions.
+const EMOSHELF_FORMAT_VERSION: u32 = 1;
+const SUPPORTED_STATE_SCHEMA: u32 = 2;
+const MAX_EMOSHELF_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_STATE_JSON_BYTES: u64 = 8 * 1024 * 1024;
+const MAX_ARCHIVE_ENTRIES: usize = 128;
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EmoShelfManifest {
+    format: String,
+    format_version: u32,
+    schema_version: u32,
+    exported_at: String,
+    app_version: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EmoShelfImportPreview {
+    manifest: EmoShelfManifest,
+    state_json: String,
+    board_count: usize,
+    item_count: usize,
+}
 
 /// 現在登録中のグローバルショートカット（差し替え時に解除するため保持）。
 struct ActiveShortcut(Mutex<Option<Shortcut>>);
@@ -217,6 +245,233 @@ fn save_state(app: tauri::AppHandle, content: String) -> Result<(), String> {
     save_state_to_paths(&path, &backup, &content)
 }
 
+fn state_schema_and_counts(content: &str) -> Result<(u32, usize, usize), String> {
+    if content.len() as u64 > MAX_STATE_JSON_BYTES {
+        return Err("state.json exceeds the 8 MiB safety limit".to_string());
+    }
+    let value: serde_json::Value = serde_json::from_str(content).map_err(|e| e.to_string())?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| "state.json must contain an object".to_string())?;
+    let schema = object
+        .get("schemaVersion")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .ok_or_else(|| "state.json schemaVersion is missing".to_string())?;
+    if schema > SUPPORTED_STATE_SCHEMA {
+        return Err(format!(
+            "state schema {schema} is newer than supported schema {SUPPORTED_STATE_SCHEMA}"
+        ));
+    }
+    let boards = object
+        .get("boards")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| "state.json boards must be an array".to_string())?;
+    let item_count = boards
+        .iter()
+        .filter_map(|board| board.get("items")?.as_array())
+        .map(Vec::len)
+        .sum();
+    Ok((schema, boards.len(), item_count))
+}
+
+fn normalized_emoshelf_path(path: &Path) -> PathBuf {
+    if path.extension().and_then(|value| value.to_str()) == Some("emoshelf") {
+        path.to_path_buf()
+    } else {
+        path.with_extension("emoshelf")
+    }
+}
+
+fn write_emoshelf_to_path(
+    requested_path: &Path,
+    state_json: &str,
+    exported_at: &str,
+) -> Result<PathBuf, String> {
+    let (schema_version, _, _) = state_schema_and_counts(state_json)?;
+    if schema_version != SUPPORTED_STATE_SCHEMA {
+        return Err(format!(
+            "only schema {SUPPORTED_STATE_SCHEMA} can be exported"
+        ));
+    }
+    let path = normalized_emoshelf_path(requested_path);
+    let parent = path
+        .parent()
+        .ok_or_else(|| "export destination has no parent directory".to_string())?;
+    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    let temporary = path.with_extension("emoshelf.tmp");
+    let backup = path.with_extension("emoshelf.bak");
+    if temporary.exists() {
+        std::fs::remove_file(&temporary).map_err(|e| e.to_string())?;
+    }
+
+    let manifest = EmoShelfManifest {
+        format: "emoshelf".to_string(),
+        format_version: EMOSHELF_FORMAT_VERSION,
+        schema_version,
+        exported_at: exported_at.to_string(),
+        app_version: env!("CARGO_PKG_VERSION").to_string(),
+    };
+    let manifest_json = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
+    let file = std::fs::File::create(&temporary).map_err(|e| e.to_string())?;
+    let mut archive = ZipWriter::new(file);
+    let options = SimpleFileOptions::default()
+        .compression_method(CompressionMethod::Deflated)
+        .unix_permissions(0o644);
+    archive
+        .start_file("manifest.json", options)
+        .map_err(|e| e.to_string())?;
+    archive
+        .write_all(manifest_json.as_bytes())
+        .map_err(|e| e.to_string())?;
+    archive
+        .start_file("state.json", options)
+        .map_err(|e| e.to_string())?;
+    archive
+        .write_all(state_json.as_bytes())
+        .map_err(|e| e.to_string())?;
+    archive.finish().map_err(|e| e.to_string())?;
+
+    let had_existing = path.exists();
+    if had_existing {
+        if backup.exists() {
+            std::fs::remove_file(&backup).map_err(|e| e.to_string())?;
+        }
+        std::fs::rename(&path, &backup).map_err(|e| e.to_string())?;
+    }
+    if let Err(error) = std::fs::rename(&temporary, &path) {
+        if had_existing {
+            let _ = std::fs::rename(&backup, &path);
+        }
+        return Err(error.to_string());
+    }
+    if had_existing {
+        let _ = std::fs::remove_file(backup);
+    }
+    Ok(path)
+}
+
+fn read_zip_text<R: Read>(reader: &mut R, max_bytes: u64) -> Result<String, String> {
+    let mut bytes = Vec::new();
+    reader
+        .take(max_bytes + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    if bytes.len() as u64 > max_bytes {
+        return Err("archive entry exceeds its safety limit".to_string());
+    }
+    String::from_utf8(bytes).map_err(|_| "archive entry is not UTF-8".to_string())
+}
+
+fn preview_emoshelf_from_path(path: &Path) -> Result<EmoShelfImportPreview, String> {
+    let metadata = std::fs::metadata(path).map_err(|e| e.to_string())?;
+    if !metadata.is_file() || metadata.len() > MAX_EMOSHELF_BYTES {
+        return Err(".emoshelf file is missing or exceeds 64 MiB".to_string());
+    }
+    let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut archive = ZipArchive::new(file).map_err(|e| e.to_string())?;
+    if archive.len() > MAX_ARCHIVE_ENTRIES {
+        return Err(".emoshelf contains too many entries".to_string());
+    }
+
+    let mut manifest_json = None;
+    let mut state_json = None;
+    let mut contains_assets = false;
+    for index in 0..archive.len() {
+        let mut entry = archive.by_index(index).map_err(|e| e.to_string())?;
+        let enclosed = entry
+            .enclosed_name()
+            .ok_or_else(|| "unsafe path in .emoshelf archive".to_string())?;
+        if entry
+            .unix_mode()
+            .is_some_and(|mode| mode & 0o170000 == 0o120000)
+        {
+            return Err("symbolic links are not allowed in .emoshelf".to_string());
+        }
+        let name = enclosed
+            .to_str()
+            .ok_or_else(|| "archive path is not valid UTF-8".to_string())?
+            .replace('\\', "/");
+        match name.as_str() {
+            "manifest.json" => {
+                if manifest_json.is_some() {
+                    return Err("duplicate manifest.json".to_string());
+                }
+                manifest_json = Some(read_zip_text(&mut entry, 64 * 1024)?);
+            }
+            "state.json" => {
+                if state_json.is_some() {
+                    return Err("duplicate state.json".to_string());
+                }
+                state_json = Some(read_zip_text(&mut entry, MAX_STATE_JSON_BYTES)?);
+            }
+            _ if name.starts_with("assets/") => {
+                if entry.size() > MAX_EMOSHELF_BYTES {
+                    return Err("archive asset exceeds its safety limit".to_string());
+                }
+                contains_assets |= !entry.is_dir();
+            }
+            _ if name.starts_with("licenses/") => {}
+            _ if entry.is_dir() => {}
+            _ => return Err(format!("unsupported archive entry: {name}")),
+        }
+    }
+
+    let manifest: EmoShelfManifest = serde_json::from_str(
+        manifest_json
+            .as_deref()
+            .ok_or_else(|| "manifest.json is missing".to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    if manifest.format != "emoshelf" || manifest.format_version != EMOSHELF_FORMAT_VERSION {
+        return Err("unsupported .emoshelf format".to_string());
+    }
+    if manifest.schema_version > SUPPORTED_STATE_SCHEMA {
+        return Err(format!(
+            "state schema {} is newer than supported schema {SUPPORTED_STATE_SCHEMA}",
+            manifest.schema_version
+        ));
+    }
+    if contains_assets {
+        return Err("custom assets require EmoShelf v0.4 or newer".to_string());
+    }
+    let state_json = state_json.ok_or_else(|| "state.json is missing".to_string())?;
+    let (schema_version, board_count, item_count) = state_schema_and_counts(&state_json)?;
+    let state_value: serde_json::Value =
+        serde_json::from_str(&state_json).map_err(|e| e.to_string())?;
+    if state_value
+        .get("customAssets")
+        .and_then(serde_json::Value::as_object)
+        .is_some_and(|assets| !assets.is_empty())
+    {
+        return Err("custom assets require EmoShelf v0.4 or newer".to_string());
+    }
+    if schema_version != manifest.schema_version {
+        return Err("manifest and state schema versions do not match".to_string());
+    }
+    Ok(EmoShelfImportPreview {
+        manifest,
+        state_json,
+        board_count,
+        item_count,
+    })
+}
+
+#[tauri::command]
+fn export_emoshelf(
+    path: String,
+    state_json: String,
+    exported_at: String,
+) -> Result<String, String> {
+    write_emoshelf_to_path(Path::new(&path), &state_json, &exported_at)
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn preview_emoshelf(path: String) -> Result<EmoShelfImportPreview, String> {
+    preview_emoshelf_from_path(Path::new(&path))
+}
+
 /// 文字列をショートカットへ変換する（"Alt+E" のような表示形式も受理）。
 fn parse_shortcut(input: &str) -> Result<Shortcut, String> {
     let normalized = input.trim().to_lowercase();
@@ -315,6 +570,7 @@ pub fn run() {
         .manage(ActiveShortcut(Mutex::new(None)))
         .manage(PasteTarget(Mutex::new(None)))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(
             tauri_plugin_window_state::Builder::default()
@@ -368,7 +624,9 @@ pub fn run() {
             load_state,
             save_state,
             set_global_shortcut,
-            paste_payload
+            paste_payload,
+            export_emoshelf,
+            preview_emoshelf
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -411,6 +669,18 @@ mod tests {
     }
 
     const VALID_JSON: &str = r#"{"schemaVersion":1,"boards":[]}"#;
+    const VALID_V2_JSON: &str = r#"{"schemaVersion":2,"boards":[{"id":"a","items":[{"id":"x"}]}]}"#;
+
+    fn write_test_archive(path: &Path, entries: &[(&str, &str)]) {
+        let file = std::fs::File::create(path).expect("create test archive");
+        let mut archive = ZipWriter::new(file);
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        for (name, content) in entries {
+            archive.start_file(*name, options).expect("start entry");
+            archive.write_all(content.as_bytes()).expect("write entry");
+        }
+        archive.finish().expect("finish archive");
+    }
 
     #[test]
     fn load_returns_none_when_no_state_file() {
@@ -509,5 +779,51 @@ mod tests {
             parse_shortcut("alt+e").expect("lowercase"),
             parse_shortcut("Alt+E").expect("display form")
         );
+    }
+
+    #[test]
+    fn emoshelf_export_roundtrips_through_preview() {
+        let dir = TempDir::new("emoshelf-roundtrip");
+        let requested = dir.path().join("backup");
+        let written = write_emoshelf_to_path(&requested, VALID_V2_JSON, "2026-09-04T00:00:00.000Z")
+            .expect("export should succeed");
+
+        assert_eq!(
+            written.extension().and_then(|value| value.to_str()),
+            Some("emoshelf")
+        );
+        let preview = preview_emoshelf_from_path(&written).expect("preview should succeed");
+        assert_eq!(preview.manifest.format, "emoshelf");
+        assert_eq!(preview.manifest.schema_version, 2);
+        assert_eq!(preview.board_count, 1);
+        assert_eq!(preview.item_count, 1);
+        assert_eq!(preview.state_json, VALID_V2_JSON);
+    }
+
+    #[test]
+    fn emoshelf_preview_rejects_future_schema() {
+        let dir = TempDir::new("emoshelf-future");
+        let path = dir.path().join("future.emoshelf");
+        let manifest = r#"{"format":"emoshelf","formatVersion":1,"schemaVersion":3,"exportedAt":"2026-09-04T00:00:00Z","appVersion":"3.0.0"}"#;
+        write_test_archive(
+            &path,
+            &[
+                ("manifest.json", manifest),
+                ("state.json", r#"{"schemaVersion":3,"boards":[]}"#),
+            ],
+        );
+
+        let error = preview_emoshelf_from_path(&path).expect_err("future schema must fail");
+        assert!(error.contains("newer than supported"));
+    }
+
+    #[test]
+    fn emoshelf_preview_rejects_path_traversal() {
+        let dir = TempDir::new("emoshelf-traversal");
+        let path = dir.path().join("unsafe.emoshelf");
+        write_test_archive(&path, &[("../state.json", VALID_V2_JSON)]);
+
+        let error = preview_emoshelf_from_path(&path).expect_err("unsafe path must fail");
+        assert!(error.contains("unsafe path"));
     }
 }

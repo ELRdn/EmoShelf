@@ -11,12 +11,13 @@ import {
   type ShelfItem,
   type TextShelfItem,
 } from "./state";
+import { type ImportMode, mergeAppStates } from "./transfer";
 
 const MAX_RECENT = 30;
 const SAVE_DEBOUNCE_MS = 300;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-function snapshotState(state: ShelfStore): AppState {
+export function snapshotState(state: ShelfStore): AppState {
   return {
     schemaVersion: state.schemaVersion,
     boards: state.boards,
@@ -100,7 +101,22 @@ export interface ShelfStore extends AppState {
     toBoardId: string,
     itemId: string,
   ) => void;
-  recordUse: (payload: string) => void;
+  saveSequence: (
+    boardId: string,
+    payload: string,
+    name?: string,
+  ) => string | null;
+  editSequence: (
+    boardId: string,
+    itemId: string,
+    payload: string,
+    name?: string,
+  ) => boolean;
+  applyImportedState: (state: AppState, mode: ImportMode) => Promise<void>;
+  recordUse: (
+    payload: string,
+    type?: "unicode" | "sequence" | "symbol",
+  ) => void;
   recordItemUse: (item: ShelfItem) => void;
   clearRecents: () => void;
   updateSettings: (partial: Partial<Settings>) => void;
@@ -353,7 +369,112 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
     get().addItemToBoard(toBoardId, input);
   },
 
-  recordUse: (payload) => {
+  saveSequence: (boardId, payload, name) => {
+    const normalized = payload.trim();
+    if (!normalized || Array.from(normalized).length > 64) {
+      return null;
+    }
+    return get().addItemToBoard(boardId, {
+      type: "sequence",
+      payload: normalized,
+      display: {
+        name: name?.trim().slice(0, 48) || normalized,
+        keywords: ["sequence", "composition"],
+      },
+    });
+  },
+
+  editSequence: (boardId, itemId, payload, name) => {
+    const normalized = payload.trim();
+    if (!normalized || Array.from(normalized).length > 64) {
+      return false;
+    }
+    let changed = false;
+    const boards = get().boards.map((board) => {
+      if (board.id !== boardId) {
+        return board;
+      }
+      const duplicate = board.items.some(
+        (item) =>
+          item.id !== itemId &&
+          item.type === "sequence" &&
+          item.payload === normalized,
+      );
+      if (duplicate) {
+        return board;
+      }
+      return {
+        ...board,
+        items: board.items.map((item) => {
+          if (item.id !== itemId || item.type !== "sequence") {
+            return item;
+          }
+          changed = true;
+          return {
+            ...item,
+            payload: normalized,
+            display: {
+              ...item.display,
+              name: name?.trim().slice(0, 48) || normalized,
+            },
+          };
+        }),
+      };
+    });
+    if (changed) {
+      withSave(set, get, { boards });
+    }
+    return changed;
+  },
+
+  applyImportedState: async (incoming, mode) => {
+    if (get().persistenceBlocked) {
+      throw new Error("state persistence is blocked for a future schema");
+    }
+    const previous = snapshotState(get());
+    const next =
+      mode === "merge"
+        ? mergeAppStates(previous, incoming)
+        : { ...incoming, settings: { ...incoming.settings } };
+    if (!["twemoji", "native"].includes(next.settings.renderer)) {
+      next.settings = { ...next.settings, renderer: "twemoji" };
+    }
+    let shortcutChanged = false;
+    if (
+      mode === "replace" &&
+      next.settings.globalShortcut !== previous.settings.globalShortcut
+    ) {
+      await invoke("set_global_shortcut", {
+        shortcut: next.settings.globalShortcut,
+      });
+      shortcutChanged = true;
+    }
+    set({
+      ...next,
+      loadError: undefined,
+      saveError: undefined,
+      persistenceBlocked: false,
+    });
+    try {
+      await get().persistNow();
+    } catch (error) {
+      set({ ...previous, saveError: String(error) });
+      if (shortcutChanged) {
+        try {
+          await invoke("set_global_shortcut", {
+            shortcut: previous.settings.globalShortcut,
+          });
+        } catch (rollbackError) {
+          throw new Error(
+            `${String(error)}; shortcut rollback failed: ${String(rollbackError)}`,
+          );
+        }
+      }
+      throw error;
+    }
+  },
+
+  recordUse: (payload, type = "unicode") => {
     const item = get()
       .boards.flatMap((board) => board.items)
       .find(
@@ -366,15 +487,15 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
     }
     const now = new Date().toISOString();
     const recentEntry = {
-      id: `unicode:${payload}`,
-      type: "unicode" as const,
+      id: `${type}:${payload}`,
+      type,
       payload,
       usedAt: now,
     };
     withSave(set, get, {
       recent: [
         recentEntry,
-        ...get().recent.filter((entry) => entry.payload !== payload),
+        ...get().recent.filter((entry) => entry.id !== `${type}:${payload}`),
       ].slice(0, MAX_RECENT),
     });
   },
