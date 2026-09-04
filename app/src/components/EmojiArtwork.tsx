@@ -37,8 +37,15 @@ export function EmojiArtwork({
     );
   }
 
+  const nativeClassName = [
+    className,
+    resolvedHexcode ? "emoji-native" : "emoji-sequence-art",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <span aria-hidden="true" className={className} role="img">
+    <span aria-hidden="true" className={nativeClassName} role="img">
       {emoji}
     </span>
   );

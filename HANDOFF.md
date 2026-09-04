@@ -1,6 +1,6 @@
 # EmoShelf 引き継ぎ書
 
-> 最終更新: 2026-09-04（基礎構築: DSH / Scarlet 🦊、Phase 0・v0.1: Cyan/Codex）
+> 最終更新: 2026-09-04（基礎構築: DSH / Scarlet 🦊、Phase 0〜v0.2: Cyan/Codex）
 > このファイルは他エージェントへの引き継ぎ用。作業開始前にここから読むこと。
 
 ## 0. 読み順（5分コース）
@@ -33,6 +33,13 @@
   - 1949件のカタログ仮想化、カテゴリ、日本語/英語検索、OS言語初期値と設定上書き
   - Twemoji/Native切替とフォールバック、Dark/Light/System、Reduced Motion、Quick/Pinned
   - Windows 11 Snap Layout用`HTMAXBUTTON`ヒットテスト、対象アプリへのフォーカス復帰
+- **v0.2 Compose & Personalization**:
+  - Compose Tray、複数絵文字のUndo/Clear/Copy/Paste、最大32要素
+  - sequence項目の保存・再利用・編集、最大64 Unicode code points
+  - 矢印移動、Enter、Ctrl+Enter、Ctrl+F、Ctrl+K、Ctrl+1..9、段階的Esc
+  - `.emoshelf` ZIPのExport/Importプレビュー、ID再割当Merge、バックアップ付きReplace
+  - ZIP件数/容量/UTF-8/パス/シンボリックリンク/future schema検証
+  - Twemoji/Native selectorと全rendererの帰属表示。外部3種はPack導入まで選択不可
 - **v0.1 データ層**:
   - Rust: `load_state` / `save_state`（アトミック保存・`.bak` 復旧）/
     `set_global_shortcut` / `paste_payload`（クリップボード→非表示→Ctrl+V）
@@ -41,16 +48,16 @@
     emojibase全1949件＋日英検索、ペーストAPI＋コピーフォールバック
   - schema v2: 判別可能ShelfItem、型付きRecent、v1移行、未知フィールド保持、未来schema上書き防止
 - **Rust 基盤検証**: lockfile 固定のコンパイル、Clippy（警告をエラー扱い）、
-  永続化・ショートカット解析の単体テスト 9 件
+  永続化・ショートカット・`.emoshelf`の単体テスト12件
 - **Windows 実機検証**: release ビルドの起動、`Alt+E` による表示／非表示、
   二重起動時の既存ウィンドウ前面化を確認。NSIS `.exe` と MSI `.msi` も生成済み
-- **フロント検証**: TypeScript、Biome、Vitest/React Testing Library/axe（13件）、production build
-- `ROADMAP.md` のPhase 0とv0.1チェックボックスは実装・検証結果へ同期済み
+- **フロント検証**: TypeScript、Biome、Vitest/React Testing Library/axe（21件）、production build
+- `ROADMAP.md` のPhase 0〜v0.2チェックボックスは受け入れ結果へ同期済み
 
 ### 次の作業
 
-- v0.2: Compose Tray、絵文字シーケンス、完全なキーボード移動、`.emoshelf` Import/Export
-- v0.3以降: アプリ別Board、Windows統合、カスタム画像/Renderer Pack、品質・Updater
+- v0.3: アプリ別Board、Frequent/Glow、履歴制御、Tray/Autostart、monitor/DPI
+- v0.4以降: カスタム画像/Renderer Pack、品質・Updater
 - Viteの500kB超チャンク警告は未解消。v1.0検証ゲートまでにデータ・locale・画面単位で分割する
 
 ## 3. 主要ファイル
@@ -70,19 +77,20 @@
     ├── docs/persistence.md             # state.json 仕様（正本）
     ├── src/
     │   ├── App.tsx / App.css            # Concept 2.5 Shelf UI
-    │   ├── components/                  # 仮想化、D&D、Twemoji、オンボーディング
+    │   ├── components/                  # 仮想化、D&D、Twemoji、Compose、Import/Export
     │   ├── test/                        # Vitest共通設定
     │   └── lib/
     │       ├── state.ts                # 型の正本（STATE_SCHEMA_VERSION = 2）
     │       ├── store.ts                # zustand ストア
     │       ├── emoji.ts                # カタログ・検索
     │       ├── paste.ts                # ペースト実行
+    │       ├── transfer.ts             # .emoshelfとID再割当Merge
     │       └── i18n.ts                 # 日本語/英語UI文言
     └── src-tauri/
         ├── Cargo.toml                  # プラグイン・enigo 追加済み
         ├── tauri.conf.json             # 製品名 EmoShelf、880x660、カスタムフレーム
-        ├── capabilities/default.json   # core/opener/clipboard-manager
-        ├── src/lib.rs                  # Rust 基盤（コマンド4件）
+        ├── capabilities/default.json   # core/opener/clipboard/dialog
+        ├── src/lib.rs                  # Rust 基盤（コマンド6件）
         └── icons/                      # テンプレ既定の仮アイコン
 ```
 
@@ -125,6 +133,8 @@ cargo check --locked
    （`XDG_CACHE_HOME`、`--store-dir`）を使うこと。通常環境では不要。
 7. **Vite のチャンクサイズ警告**: 日英emojibase全件を含むため500kB超の警告が出る。
    1949件のDOM描画は仮想化済みだが、配信チャンクはv1.0までに分割する。
+8. **外部Renderer**: Fluent/Noto/OpenMojiは未同梱。設定には利用不可で表示し、
+   v0.4の署名・ハッシュ検証付きRenderer Packで有効化する。
 
 ## 6. 決定事項（覆す場合は記録を残すこと）
 
@@ -139,13 +149,13 @@ cargo check --locked
 | ショートカット登録 | Rust が所有、フロントは設定値の通知のみ | 二重登録・競合の単一管理点化 |
 | ペースト方式 | クリップボード＋enigo の Ctrl+V | 標準的構成。失敗時は Copy only に自動フォールバック |
 
-## 7. 次の作業の推奨順序（v0.2）
+## 7. 次の作業の推奨順序（v0.3）
 
-1. Compose Trayと複数絵文字のUndo/Clear/Copy/Paste
-2. sequence項目の保存・再利用・編集
-3. 矢印キー移動と固定ショートカット仕様の完了
-4. `.emoshelf` ZIPのExport/Import、プレビュー、Merge/Replace、バックアップ保護
-5. Renderer Pack配布契約とライセンスUIの基礎
+1. 前面アプリの実行ファイル名とmonitor IDだけをRustで取得
+2. 初期OFFのアプリ別Board mappingとfallback
+3. Frequent、Shelf Glow、履歴リセット、利用追跡OFF
+4. Autostart、System Tray、表示位置、DPI対応
+5. x64実機とCIでWindows統合を回帰確認
 
 ## 8. 規約
 

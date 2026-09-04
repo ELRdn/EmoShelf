@@ -260,12 +260,12 @@ A user can:
 
 ## Compose mode
 
-- [ ] Compose Tray
-- [ ] Add multiple emojis before paste
-- [ ] Undo last addition
-- [ ] Clear composition
-- [ ] Paste composition
-- [ ] Copy composition
+- [x] Compose Tray
+- [x] Add multiple emojis before paste
+- [x] Undo last addition
+- [x] Clear composition
+- [x] Paste composition
+- [x] Copy composition
 
 Example:
 
@@ -277,9 +277,9 @@ Example:
 
 ## Emoji Sequences
 
-- [ ] Save a sequence as one Shelf item
-- [ ] Reuse saved sequences
-- [ ] Edit saved sequences
+- [x] Save a sequence as one Shelf item
+- [x] Reuse saved sequences
+- [x] Edit saved sequences
 
 Examples:
 
@@ -292,33 +292,34 @@ Examples:
 
 ## Renderer switching
 
-- [ ] Renderer selector
-- [ ] Twemoji
+- [x] Renderer selector
+- [x] Twemoji
 - [ ] Fluent Emoji
 - [ ] Noto Emoji
 - [ ] OpenMoji
-- [ ] Native/system
-- [ ] Per-renderer attribution information
+- [x] Native/system
+- [x] Per-renderer attribution information
 
-Availability depends on implementation and license review.
+Fluent/Noto/OpenMojiはv0.4の署名付きRenderer Packとして導入する。v0.2では
+未インストールの外部rendererを選択できない状態で表示し、ライセンス情報だけを先行表示する。
 
 ## Import / Export
 
-- [ ] Export local EmoShelf configuration
-- [ ] Import configuration
-- [ ] Schema version
-- [ ] Validation
-- [ ] Safe merge / replace flow
+- [x] Export local EmoShelf configuration
+- [x] Import configuration
+- [x] Schema version
+- [x] Validation
+- [x] Safe merge / replace flow
 
 ## Keyboard improvements
 
-- [ ] Arrow-key navigation
-- [ ] Enter to paste
-- [ ] Escape to close
-- [ ] Search shortcut
-- [ ] Actions shortcut
-- [ ] Add-to-Shelf shortcut
-- [ ] Board switching shortcuts
+- [x] Arrow-key navigation
+- [x] Enter to paste
+- [x] Escape to close
+- [x] Search shortcut
+- [x] Actions shortcut
+- [x] Add-to-Shelf shortcut
+- [x] Board switching shortcuts
 
 ### Exit criteria for v0.2
 

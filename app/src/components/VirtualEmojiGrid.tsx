@@ -53,6 +53,18 @@ export function VirtualEmojiGrid({
     () => `repeat(${columns}, minmax(0, 1fr))`,
     [columns],
   );
+  const selectedIndex = selectedEmoji
+    ? entries.findIndex((entry) => entry.emoji === selectedEmoji)
+    : -1;
+
+  useEffect(() => {
+    if (selectedIndex < 0) {
+      return;
+    }
+    virtualizer.scrollToIndex(Math.floor(selectedIndex / columns), {
+      align: "auto",
+    });
+  }, [columns, selectedIndex, virtualizer]);
 
   return (
     <section
@@ -76,7 +88,7 @@ export function VirtualEmojiGrid({
                 transform: `translateY(${row.start}px)`,
               }}
             >
-              {rowEntries.map((entry) => {
+              {rowEntries.map((entry, columnIndex) => {
                 const isSelected = selectedEmoji === entry.emoji;
                 const isPicked = picked?.has(entry.emoji) ?? false;
                 return (
@@ -84,6 +96,7 @@ export function VirtualEmojiGrid({
                     aria-label={entry.label}
                     aria-pressed={isPicked || undefined}
                     className={`emoji-tile${isSelected ? " is-selected" : ""}${isPicked ? " is-picked" : ""}`}
+                    data-catalog-index={start + columnIndex}
                     key={entry.hexcode}
                     onClick={() => onSelect(entry)}
                     title={entry.label}

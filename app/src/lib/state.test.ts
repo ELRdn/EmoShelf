@@ -62,4 +62,26 @@ describe("state schema", () => {
       parseAppState({ ...createInitialState(), boards: "invalid" }),
     ).toThrow();
   });
+
+  it("preserves unknown fields inside supported schema objects", () => {
+    const initial = createInitialState();
+    const raw = {
+      ...initial,
+      settings: { ...initial.settings, futurePreference: "keep-me" },
+      boards: [
+        {
+          id: "board",
+          name: "Board",
+          order: 0,
+          items: [],
+          futureBoardField: true,
+        },
+      ],
+    };
+
+    const parsed = parseAppState(raw);
+
+    expect(parsed.settings).toHaveProperty("futurePreference", "keep-me");
+    expect(parsed.boards[0]).toHaveProperty("futureBoardField", true);
+  });
 });
