@@ -8,6 +8,8 @@
 | --- | --- | --- |
 | アプリ状態 | `appLocalData` (`AppData/...`) | `state.json` |
 | 自動バックアップ | 同上 | `state.json.bak` |
+| カスタム画像 | `appLocalData/custom-assets` | `<sha256>.png` |
+| Renderer Pack | `appLocalData/renderer-packs` | Renderer ID別ディレクトリ |
 
 正規の保存先はRust側が管理する上記JSONファイルとする。
 
@@ -65,7 +67,7 @@
   },
   "onboardingCompleted": false,
   "appBoardMappings": {},
-  "customAssets": [],
+  "customAssets": {},
   "extensions": {}
 }
 ```
@@ -82,6 +84,16 @@
 | `image` | `assetId` | アプリ管理下のカスタム画像 |
 
 `recent`も同じ型付き参照を使い、画像の外部元パスは保持しない。
+
+## カスタム画像
+
+- PNG／WebP／静的SVGだけをバイト内容で判定し、すべてPNGへ正規化する
+- 正規化PNGのSHA-256小文字hexを`assetId`、`sha256`、ファイル名に共用する
+- 1辺2048px、4,194,304画素、正規化後8MiB、保存256件を上限とする
+- SVGの外部参照、script、animation、埋め込みimage、style要素／属性等はfail-closedで拒否する
+- 読み出し時もPNG形式とhashを再検証する
+- Board参照中の画像は削除しない。Recentだけの参照は状態から除去してから削除する
+- 外部の元パス・元ファイル名は`state.json`へ保存しない
 
 ## v1 → v2移行
 
@@ -118,17 +130,20 @@
 
 ## `.emoshelf`交換形式
 
-`.emoshelf`はZIPコンテナで、v0.2では次の2ファイルを必須とする。
+`.emoshelf`はZIPコンテナで、次の2ファイルと任意のローカル画像・ライセンスを格納する。
 
 | Entry | 内容 |
 | --- | --- |
 | `manifest.json` | format/version、state schema、Export日時、アプリ版 |
 | `state.json` | 検証済みの`AppState` |
+| `assets/<sha256>.png` | `state.json`が参照する正規化済みカスタム画像 |
+| `licenses/*` | 任意のライセンス文書（256KiB/件まで） |
 
 - container formatは`1`、state schemaは現時点で`1`または`2`を受理する
 - 64MiB超のcontainer、8MiB超のstate、128件超のentryを拒否する
 - 絶対パス、親脱出、NUL、シンボリックリンク、未知entryを拒否する
 - future schema、manifest/state不一致、不正JSONは適用前に拒否する
+- manifest・state・ZIP内asset集合の完全一致、各画像のSHA-256・寸法・容量を適用前に再検証する
 - MergeはBoard/item IDを再割り当てし、ローカル設定を維持する
 - Replaceは現在の`state.json`を`.bak`へ退避してから即時保存する
-- `assets/`と`licenses/`は形式上予約済み。Custom Asset実装前のv0.2はasset入りを拒否する
+- asset導入は全件検証後に行い、途中失敗時は新規作成分をロールバックする

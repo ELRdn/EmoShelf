@@ -25,6 +25,7 @@ interface NativeImportPreview {
   stateJson: string;
   boardCount: number;
   itemCount: number;
+  assetCount: number;
 }
 
 export interface ImportPreview extends NativeImportPreview {
@@ -71,7 +72,7 @@ export function mergeAppStates(
 
   for (const asset of Object.values(incoming.customAssets)) {
     const existingId = existingByHash.get(asset.sha256);
-    const nextId = existingId ?? createId();
+    const nextId = existingId ?? asset.sha256;
     assetIds.set(asset.id, nextId);
     if (!existingId) {
       customAssets[nextId] = { ...asset, id: nextId };
@@ -170,4 +171,8 @@ export async function openEmoShelfPreview(): Promise<ImportPreview | null> {
   });
   const state = parseAppState(JSON.parse(preview.stateJson) as unknown);
   return { ...preview, path, state };
+}
+
+export async function installEmoShelfAssets(path: string): Promise<void> {
+  await invoke("install_emoshelf_assets", { path });
 }

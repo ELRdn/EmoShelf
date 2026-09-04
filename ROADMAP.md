@@ -384,21 +384,25 @@ This milestone is intentionally deferred until the core Shelf experience is stab
 
 ## Custom image emojis
 
-- [ ] Import PNG/WebP/SVG where safe/supported
-- [ ] Local image library
-- [ ] Custom image Boards
-- [ ] Copy image
+- [x] Import PNG/WebP/SVG where safe/supported
+- [x] Local image library
+- [x] Custom image Boards
+- [x] Copy image
 - [ ] Drag image into compatible applications
-- [ ] Remove local asset safely
+- [x] Remove local asset safely
 
 ## Emoji packs
 
-- [ ] Renderer/pack abstraction
-- [ ] Pack metadata
-- [ ] Local install/uninstall
-- [ ] Compatibility checks
-- [ ] License metadata
-- [ ] Attribution UI
+- [x] Renderer/pack abstraction
+- [x] Pack metadata
+- [x] Local install/uninstall
+- [x] Compatibility checks
+- [x] License metadata
+- [x] Attribution UI
+
+Windows OLEの外部ドラッグ実装とコピーフォールバックは組み込み済み。実Tauriから
+Explorerへの受け入れ確認は、Computer Useが対象ウィンドウ外へのポインター移動を拒否するため未完了。
+互換アプリへの実ドロップ成功を確認するまで該当チェックは更新しない。
 
 ## Guardrails
 

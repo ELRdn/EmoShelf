@@ -1,6 +1,6 @@
 # EmoShelf 引き継ぎ書
 
-> 最終更新: 2026-09-04（基礎構築: DSH / Scarlet 🦊、Phase 0〜v0.3: Cyan/Codex）
+> 最終更新: 2026-09-05（基礎構築: DSH / Scarlet 🦊、Phase 0〜v0.4: Cyan/Codex）
 > このファイルは他エージェントへの引き継ぎ用。作業開始前にここから読むこと。
 
 ## 0. 読み順（5分コース）
@@ -46,6 +46,13 @@
   - 利用回数、Frequent、初期OFFのShelf Glow、利用追跡停止、統計リセット
   - Autostart、Tray左クリック／メニュー、閉じる→Tray、二重起動前面化
   - 操作中アプリのmonitorへ物理座標で表示、最後の位置を維持する選択肢
+- **v0.4 Custom Emoji & Packs**:
+  - PNG／WebP／静的SVGをバイト判定し、最大寸法・容量・件数を制限してPNGへ正規化
+  - 正規化PNGのSHA-256をID／ファイル名に使うローカル画像ライブラリ。元パスは保存しない
+  - 画像Board、画像clipboard、Windows OLE外部ドラッグ、失敗時の画像コピーフォールバック
+  - Board参照中アセットの削除防止、Recentのみの参照を安全に掃除する削除、`.emoshelf` asset統合
+  - Ed25519署名・hash・互換性・ZIP構造・静的SVGを検証するRenderer Pack管理と帰属UI
+  - 本番信頼鍵が無いビルドはPackを一切受理しないfail-closed設計
 - **v0.1 データ層**:
   - Rust: `load_state` / `save_state`（アトミック保存・`.bak` 復旧）/
     `set_global_shortcut` / `paste_payload`（クリップボード→非表示→Ctrl+V）
@@ -54,16 +61,18 @@
     emojibase全1949件＋日英検索、ペーストAPI＋コピーフォールバック
   - schema v2: 判別可能ShelfItem、型付きRecent、v1移行、未知フィールド保持、未来schema上書き防止
 - **Rust 基盤検証**: lockfile 固定のコンパイル、Clippy（警告をエラー扱い）、
-  永続化・ショートカット・`.emoshelf`・前面実行ファイル名の単体テスト13件
+  永続化・ショートカット・`.emoshelf`・カスタム画像・Renderer Pack等の単体テスト60件
 - **Windows 実機検証**: release ビルドの起動、`Alt+E` による表示／非表示、
   二重起動時の既存ウィンドウ前面化を確認。NSIS `.exe` と MSI `.msi` も生成済み
-- **フロント検証**: TypeScript、Biome、Vitest/React Testing Library/axe（28件）、production build
-- `ROADMAP.md` のPhase 0〜v0.3チェックボックスは受け入れ結果へ同期済み
+- **フロント検証**: TypeScript、Biome、Vitest/React Testing Library/axe（42件）、production build
+- **v0.4実機確認**: PNG取込・表示・Board追加・削除、128×128画像clipboard、画像Paste、
+  `Alt+E`、単一起動を確認。ExplorerへのOLE実ドロップはComputer Useのウィンドウ境界制約で未受入
+- `ROADMAP.md` のPhase 0〜v0.4チェックボックスは受け入れ結果へ同期済み
 
 ### 次の作業
 
-- v0.4: カスタム画像、画像Board、画像clipboard/drag、Renderer Pack
-- v0.5以降: Accessibility、性能、復旧、Updater、120/144Hz以上の実機確認
+- v0.4残件: Explorer／画像対応アプリへのOLE実ドロップを手動またはウィンドウ間操作可能な環境で確認
+- v0.5: Accessibility、性能、復旧、設定バックアップ、署名必須Updater、120/144Hz以上の実機確認
 - Viteの500kB超チャンク警告は未解消。v1.0検証ゲートまでにデータ・locale・画面単位で分割する
 
 ## 3. 主要ファイル
@@ -80,7 +89,8 @@
     ├── biome.json                      # 整形・lint（Biome 2.x、推奨プリセット）
     ├── .npmrc                          # esbuild の postinstall スキップ（§5 参照）
     ├── README.md                       # 開発者向け説明
-    ├── docs/persistence.md             # state.json 仕様（正本）
+    ├── docs/persistence.md             # state.json / .emoshelf仕様（正本）
+    ├── docs/renderer-packs.md          # 署名付きRenderer Pack仕様
     ├── src/
     │   ├── App.tsx / App.css            # Concept 2.5 Shelf UI
     │   ├── components/                  # 仮想化、D&D、Twemoji、Compose、Import/Export
@@ -96,7 +106,9 @@
         ├── Cargo.toml                  # プラグイン・enigo 追加済み
         ├── tauri.conf.json             # 製品名 EmoShelf、880x660、カスタムフレーム
         ├── capabilities/default.json   # core/opener/clipboard/dialog
-        ├── src/lib.rs                  # Rust 基盤（コマンド10件）
+        ├── src/lib.rs                  # Rust 基盤（コマンド登録・Windows統合）
+        ├── src/custom_assets.rs        # 画像検証・正規化・content-addressed保存
+        ├── src/renderer_packs.rs       # 署名付きPack検証・管理
         └── icons/                      # テンプレ既定の仮アイコン
 ```
 
@@ -123,7 +135,7 @@ cargo check --locked
 
 1. **Rust はローカル検証済み**: `cargo fmt --check`、警告をエラー扱いした Clippy、
    単体テスト、`cargo check --locked` を各PRの完了条件とする。
-   永続化・ショートカット・交換形式・前面アプリ境界に Rust 単体テスト 13 件がある。
+   永続化・ショートカット・交換形式・前面アプリ・画像・Pack境界に Rust 単体テスト 60 件がある。
 2. **`Cargo.lock` は同期・コミット必須**: `Cargo.toml` の全直接依存を含む状態で管理し、
    CI でも `--locked` を指定して意図しない依存更新を拒否する。
 3. **esbuild の postinstall を無効化している**（`app/.npmrc` の `never-built-dependencies`）:
@@ -139,8 +151,12 @@ cargo check --locked
    （`XDG_CACHE_HOME`、`--store-dir`）を使うこと。通常環境では不要。
 7. **Vite のチャンクサイズ警告**: 日英emojibase全件を含むため500kB超の警告が出る。
    1949件のDOM描画は仮想化済みだが、配信チャンクはv1.0までに分割する。
-8. **外部Renderer**: Fluent/Noto/OpenMojiは未同梱。設定には利用不可で表示し、
-   v0.4の署名・ハッシュ検証付きRenderer Packで有効化する。
+8. **外部Renderer**: Fluent/Noto/OpenMojiは未同梱。v0.4で署名・ハッシュ検証付き
+   Renderer Pack管理を実装済みだが、`EMOSHELF_RENDERER_KEY_ID`と
+   `EMOSHELF_RENDERER_PUBLIC_KEY_BASE64`をビルド時に設定しない限りfail-closedで無効になる。
+   秘密鍵はリポジトリへ置かない。Pack詳細は`app/docs/renderer-packs.md`を参照。
+9. **v0.4 OLE実ドロップ**: 実装・Windowsコンパイル・キャンセル経路までは確認済み。
+   現行Computer Useは対象ウィンドウ外座標へドラッグできないため、Explorer等への成功証跡だけ残件。
 
 ## 6. 決定事項（覆す場合は記録を残すこと）
 
@@ -155,13 +171,13 @@ cargo check --locked
 | ショートカット登録 | Rust が所有、フロントは設定値の通知のみ | 二重登録・競合の単一管理点化 |
 | ペースト方式 | クリップボード＋enigo の Ctrl+V | 標準的構成。失敗時は Copy only に自動フォールバック |
 
-## 7. 次の作業の推奨順序（v0.4）
+## 7. 次の作業の推奨順序（v0.5）
 
-1. PNG/WebP/SVGの制限付きImportとハッシュID保存
-2. SVG sanitizeと正規化PNG、画像clipboardとOLE drag
-3. 参照中assetを保護する削除と`.emoshelf` asset統合
-4. 署名・hash検証付きRenderer Pack管理
-5. x64実機とCIでUnicode workflowを回帰確認
+1. Accessibilityとキーボード／focus-visible／contrastの監査
+2. 画面・locale・emoji dataの分割と性能計測
+3. crash recoveryと設定バックアップ
+4. 署名検証必須の静かなUpdaterフロー
+5. DPI・複数monitor・高リフレッシュ環境の実機確認
 
 ## 8. 規約
 

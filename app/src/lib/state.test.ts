@@ -84,4 +84,73 @@ describe("state schema", () => {
     expect(parsed.settings).toHaveProperty("futurePreference", "keep-me");
     expect(parsed.boards[0]).toHaveProperty("futureBoardField", true);
   });
+
+  it("accepts only content-addressed normalized custom assets", () => {
+    const id = "a".repeat(64);
+    const initial = createInitialState();
+    initial.customAssets[id] = {
+      id,
+      fileName: `${id}.png`,
+      mediaType: "image/png",
+      width: 64,
+      height: 64,
+      byteLength: 120,
+      sha256: id,
+      addedAt: "2026-01-01T00:00:00Z",
+    };
+
+    expect(parseAppState(initial).customAssets[id]).toMatchObject({ id });
+    expect(() =>
+      parseAppState({
+        ...initial,
+        customAssets: {
+          [id]: { ...initial.customAssets[id], fileName: "outside.png" },
+        },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects mismatched asset map keys and dangling image references", () => {
+    const id = "b".repeat(64);
+    const asset = {
+      id,
+      fileName: `${id}.png`,
+      mediaType: "image/png" as const,
+      width: 32,
+      height: 32,
+      byteLength: 99,
+      sha256: id,
+      addedAt: "2026-01-01T00:00:00Z",
+    };
+    expect(() =>
+      parseAppState({
+        ...createInitialState(),
+        customAssets: { ["c".repeat(64)]: asset },
+      }),
+    ).toThrow();
+    expect(() =>
+      parseAppState({
+        ...createInitialState(),
+        boards: [
+          {
+            id: "board",
+            name: "Images",
+            order: 0,
+            items: [
+              {
+                id: "image",
+                type: "image",
+                assetId: id,
+                display: { name: "Missing", keywords: [] },
+                usage: {
+                  addedAt: "2026-01-01T00:00:00Z",
+                  useCount: 0,
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow();
+  });
 });

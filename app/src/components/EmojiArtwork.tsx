@@ -1,5 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { type AppLocale, findByEmoji } from "../lib/emoji";
+import {
+  type PackRendererId,
+  rendererAssetDataUrl,
+} from "../lib/rendererPacks";
 import type { RendererId } from "../lib/state";
 
 interface EmojiArtworkProps {
@@ -18,12 +22,40 @@ export function EmojiArtwork({
   className,
 }: EmojiArtworkProps) {
   const [failedSource, setFailedSource] = useState("");
+  const [packSource, setPackSource] = useState("");
   const resolvedHexcode = hexcode ?? findByEmoji(emoji, locale)?.hexcode;
-  const source = resolvedHexcode
+  const twemojiSource = resolvedHexcode
     ? `/twemoji/${resolvedHexcode.toLowerCase()}.svg`
     : "";
+  const isPackRenderer = !["twemoji", "native"].includes(renderer);
 
-  if (renderer === "twemoji" && source && failedSource !== source) {
+  useEffect(() => {
+    let active = true;
+    setPackSource("");
+    if (!isPackRenderer || !resolvedHexcode) {
+      return () => {
+        active = false;
+      };
+    }
+    void rendererAssetDataUrl(renderer as PackRendererId, resolvedHexcode)
+      .then((source) => {
+        if (active) {
+          setPackSource(source);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setPackSource("");
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [isPackRenderer, renderer, resolvedHexcode]);
+
+  const source = isPackRenderer ? packSource || twemojiSource : twemojiSource;
+
+  if (renderer !== "native" && source && failedSource !== source) {
     return (
       <img
         alt=""

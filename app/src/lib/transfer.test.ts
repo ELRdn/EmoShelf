@@ -53,21 +53,20 @@ describe("mergeAppStates", () => {
 
   it("deduplicates custom assets by hash and remaps image references", () => {
     const current = createInitialState();
-    current.customAssets.local = {
-      id: "local",
-      fileName: "local.png",
+    const hash = "a".repeat(64);
+    current.customAssets[hash] = {
+      id: hash,
+      fileName: `${hash}.png`,
       mediaType: "image/png",
       width: 32,
       height: 32,
       byteLength: 10,
-      sha256: "same-hash",
+      sha256: hash,
       addedAt: "2026-01-01T00:00:00Z",
     };
     const incoming = createInitialState();
-    incoming.customAssets.foreign = {
-      ...current.customAssets.local,
-      id: "foreign",
-      fileName: "foreign.png",
+    incoming.customAssets[hash] = {
+      ...current.customAssets[hash],
     };
     incoming.boards = [
       {
@@ -78,7 +77,7 @@ describe("mergeAppStates", () => {
           {
             id: "foreign-item",
             type: "image",
-            assetId: "foreign",
+            assetId: hash,
             display: { name: "Image", keywords: [] },
             usage: { addedAt: "2026-01-01T00:00:00Z", useCount: 0 },
           },
@@ -88,7 +87,48 @@ describe("mergeAppStates", () => {
 
     const merged = mergeAppStates(current, incoming, idFactory());
 
-    expect(Object.keys(merged.customAssets)).toEqual(["local"]);
-    expect(merged.boards[0]?.items[0]).toMatchObject({ assetId: "local" });
+    expect(Object.keys(merged.customAssets)).toEqual([hash]);
+    expect(merged.boards[0]?.items[0]).toMatchObject({ assetId: hash });
+  });
+
+  it("uses a new asset hash as its stable ID while remapping item IDs", () => {
+    const current = createInitialState();
+    const incoming = createInitialState();
+    const hash = "b".repeat(64);
+    incoming.customAssets[hash] = {
+      id: hash,
+      fileName: `${hash}.png`,
+      mediaType: "image/png",
+      width: 64,
+      height: 64,
+      byteLength: 200,
+      sha256: hash,
+      addedAt: "2026-01-01T00:00:00Z",
+    };
+    incoming.boards = [
+      {
+        id: "foreign-board",
+        name: "Images",
+        order: 0,
+        items: [
+          {
+            id: "foreign-item",
+            type: "image",
+            assetId: hash,
+            display: { name: "Image", keywords: [] },
+            usage: { addedAt: "2026-01-01T00:00:00Z", useCount: 0 },
+          },
+        ],
+      },
+    ];
+
+    const merged = mergeAppStates(current, incoming, idFactory());
+
+    expect(merged.customAssets[hash]?.id).toBe(hash);
+    expect(merged.boards[0]?.id).toBe("new-1");
+    expect(merged.boards[0]?.items[0]).toMatchObject({
+      id: "new-2",
+      assetId: hash,
+    });
   });
 });

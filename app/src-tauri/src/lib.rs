@@ -6,12 +6,15 @@
 //
 // 仕様の正本は app/docs/persistence.md。
 
+use std::collections::{BTreeMap, HashSet};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Mutex;
 use std::time::Duration;
 
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
 #[cfg(windows)]
 use std::sync::atomic::{AtomicIsize, Ordering};
 
@@ -26,20 +29,39 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
+mod custom_assets;
+mod renderer_packs;
+
 #[cfg(windows)]
-use windows::core::PWSTR;
+use windows::core::{PCWSTR, PWSTR};
 #[cfg(windows)]
-use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+use windows::Win32::Foundation::{
+    CloseHandle, DRAGDROP_S_CANCEL, DRAGDROP_S_DROP, DRAGDROP_S_USEDEFAULTCURSORS, HWND, LPARAM,
+    LRESULT, POINT, RECT, S_OK, WPARAM,
+};
 #[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromWindow, ScreenToClient, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST,
 };
+#[cfg(windows)]
+use windows::Win32::System::Com::{CoTaskMemFree, IDataObject};
+#[cfg(windows)]
+use windows::Win32::System::Ole::{
+    DoDragDrop, IDropSource, IDropSource_Impl, OleInitialize, OleUninitialize, DROPEFFECT,
+    DROPEFFECT_COPY, DROPEFFECT_NONE,
+};
+#[cfg(windows)]
+use windows::Win32::System::SystemServices::{MK_LBUTTON, MODIFIERKEYS_FLAGS};
 #[cfg(windows)]
 use windows::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 #[cfg(windows)]
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
+#[cfg(windows)]
+use windows::Win32::UI::Shell::Common::ITEMIDLIST;
+#[cfg(windows)]
+use windows::Win32::UI::Shell::{SHCreateDataObject, SHParseDisplayName};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
     CallWindowProcW, DefWindowProcW, GetClientRect, GetForegroundWindow, GetWindowThreadProcessId,
@@ -64,7 +86,21 @@ const EMOSHELF_FORMAT_VERSION: u32 = 1;
 const SUPPORTED_STATE_SCHEMA: u32 = 2;
 const MAX_EMOSHELF_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_STATE_JSON_BYTES: u64 = 8 * 1024 * 1024;
-const MAX_ARCHIVE_ENTRIES: usize = 128;
+const MAX_ARCHIVE_ENTRIES: usize = 320;
+const MAX_CUSTOM_ASSETS: usize = 256;
+const MAX_CUSTOM_ASSET_BYTES: u64 = 8 * 1024 * 1024;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct EmoShelfAssetManifest {
+    id: String,
+    path: String,
+    media_type: String,
+    width: u32,
+    height: u32,
+    byte_length: u64,
+    sha256: String,
+}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -74,6 +110,8 @@ struct EmoShelfManifest {
     schema_version: u32,
     exported_at: String,
     app_version: String,
+    #[serde(default)]
+    assets: Vec<EmoShelfAssetManifest>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -83,6 +121,12 @@ struct EmoShelfImportPreview {
     state_json: String,
     board_count: usize,
     item_count: usize,
+    asset_count: usize,
+}
+
+struct ParsedEmoShelfBundle {
+    preview: EmoShelfImportPreview,
+    assets: Vec<(String, Vec<u8>)>,
 }
 
 /// 現在登録中のグローバルショートカット（差し替え時に解除するため保持）。
@@ -426,6 +470,117 @@ fn state_schema_and_counts(content: &str) -> Result<(u32, usize, usize), String>
     Ok((schema, boards.len(), item_count))
 }
 
+fn state_custom_asset_manifests(content: &str) -> Result<Vec<EmoShelfAssetManifest>, String> {
+    let value: serde_json::Value = serde_json::from_str(content).map_err(|e| e.to_string())?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| "state.json must contain an object".to_string())?;
+    let assets = object
+        .get("customAssets")
+        .and_then(serde_json::Value::as_object);
+    let mut records = BTreeMap::new();
+    if let Some(assets) = assets {
+        if assets.len() > MAX_CUSTOM_ASSETS {
+            return Err(format!(
+                "state.json contains more than {MAX_CUSTOM_ASSETS} custom assets"
+            ));
+        }
+        for (key, value) in assets {
+            let record = value
+                .as_object()
+                .ok_or_else(|| "custom asset metadata must be an object".to_string())?;
+            let string = |name: &str| {
+                record
+                    .get(name)
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+                    .ok_or_else(|| format!("custom asset {name} is missing"))
+            };
+            let number = |name: &str| {
+                record
+                    .get(name)
+                    .and_then(serde_json::Value::as_u64)
+                    .ok_or_else(|| format!("custom asset {name} is missing"))
+            };
+            let id = string("id")?;
+            let sha256 = string("sha256")?;
+            let file_name = string("fileName")?;
+            let media_type = string("mediaType")?;
+            let width = u32::try_from(number("width")?)
+                .map_err(|_| "custom asset width is invalid".to_string())?;
+            let height = u32::try_from(number("height")?)
+                .map_err(|_| "custom asset height is invalid".to_string())?;
+            let byte_length = number("byteLength")?;
+            if key != &id
+                || id != sha256
+                || file_name != format!("{id}.png")
+                || media_type != "image/png"
+                || id.len() != 64
+                || !id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                || width == 0
+                || height == 0
+                || width > 2048
+                || height > 2048
+                || u64::from(width) * u64::from(height) > 4_194_304
+                || byte_length > MAX_CUSTOM_ASSET_BYTES
+            {
+                return Err(format!("invalid custom asset metadata for {key}"));
+            }
+            records.insert(
+                id.clone(),
+                EmoShelfAssetManifest {
+                    id: id.clone(),
+                    path: format!("assets/{id}.png"),
+                    media_type,
+                    width,
+                    height,
+                    byte_length,
+                    sha256,
+                },
+            );
+        }
+    }
+
+    let has_asset = |asset_id: &str| records.contains_key(asset_id);
+    if let Some(boards) = object.get("boards").and_then(serde_json::Value::as_array) {
+        for item in boards
+            .iter()
+            .filter_map(|board| board.get("items")?.as_array())
+            .flatten()
+        {
+            if item.get("type").and_then(serde_json::Value::as_str) == Some("image") {
+                let asset_id = item
+                    .get("assetId")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| "image item assetId is missing".to_string())?;
+                if !has_asset(asset_id) {
+                    return Err(format!(
+                        "image item references missing custom asset {asset_id}"
+                    ));
+                }
+            }
+        }
+    }
+    if let Some(recent) = object.get("recent").and_then(serde_json::Value::as_array) {
+        for entry in recent {
+            if entry.get("type").and_then(serde_json::Value::as_str) == Some("image") {
+                let asset_id = entry
+                    .get("assetId")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| "image recent assetId is missing".to_string())?;
+                if !has_asset(asset_id) {
+                    return Err(format!(
+                        "image recent entry references missing custom asset {asset_id}"
+                    ));
+                }
+            }
+        }
+    }
+    Ok(records.into_values().collect())
+}
+
 fn normalized_emoshelf_path(path: &Path) -> PathBuf {
     if path.extension().and_then(|value| value.to_str()) == Some("emoshelf") {
         path.to_path_buf()
@@ -438,6 +593,7 @@ fn write_emoshelf_to_path(
     requested_path: &Path,
     state_json: &str,
     exported_at: &str,
+    asset_directory: Option<&Path>,
 ) -> Result<PathBuf, String> {
     let (schema_version, _, _) = state_schema_and_counts(state_json)?;
     if schema_version != SUPPORTED_STATE_SCHEMA {
@@ -445,6 +601,26 @@ fn write_emoshelf_to_path(
             "only schema {SUPPORTED_STATE_SCHEMA} can be exported"
         ));
     }
+    let assets = state_custom_asset_manifests(state_json)?;
+    let mut asset_bytes = Vec::with_capacity(assets.len());
+    for asset in &assets {
+        let directory =
+            asset_directory.ok_or_else(|| "custom asset directory is unavailable".to_string())?;
+        let bytes = custom_assets::read_png_bytes_at(directory, &asset.id)?;
+        let (width, height) = custom_assets::validate_png_bytes(&asset.id, &bytes)?;
+        if width != asset.width
+            || height != asset.height
+            || bytes.len() as u64 != asset.byte_length
+            || asset.sha256 != asset.id
+        {
+            return Err(format!(
+                "custom asset metadata does not match stored bytes for {}",
+                asset.id
+            ));
+        }
+        asset_bytes.push((asset.path.clone(), bytes));
+    }
+
     let path = normalized_emoshelf_path(requested_path);
     let parent = path
         .parent()
@@ -462,6 +638,7 @@ fn write_emoshelf_to_path(
         schema_version,
         exported_at: exported_at.to_string(),
         app_version: env!("CARGO_PKG_VERSION").to_string(),
+        assets,
     };
     let manifest_json = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
     let file = std::fs::File::create(&temporary).map_err(|e| e.to_string())?;
@@ -481,7 +658,22 @@ fn write_emoshelf_to_path(
     archive
         .write_all(state_json.as_bytes())
         .map_err(|e| e.to_string())?;
+    for (archive_path, bytes) in asset_bytes {
+        archive
+            .start_file(archive_path, options)
+            .map_err(|e| e.to_string())?;
+        archive.write_all(&bytes).map_err(|e| e.to_string())?;
+    }
     archive.finish().map_err(|e| e.to_string())?;
+
+    if std::fs::metadata(&temporary)
+        .map_err(|e| e.to_string())?
+        .len()
+        > MAX_EMOSHELF_BYTES
+    {
+        let _ = std::fs::remove_file(&temporary);
+        return Err("exported .emoshelf exceeds the 64 MiB safety limit".to_string());
+    }
 
     let had_existing = path.exists();
     if had_existing {
@@ -514,7 +706,37 @@ fn read_zip_text<R: Read>(reader: &mut R, max_bytes: u64) -> Result<String, Stri
     String::from_utf8(bytes).map_err(|_| "archive entry is not UTF-8".to_string())
 }
 
-fn preview_emoshelf_from_path(path: &Path) -> Result<EmoShelfImportPreview, String> {
+fn read_zip_bytes<R: Read>(reader: &mut R, max_bytes: u64) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::new();
+    reader
+        .take(max_bytes + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    if bytes.len() as u64 > max_bytes {
+        return Err("archive entry exceeds its safety limit".to_string());
+    }
+    Ok(bytes)
+}
+
+fn parse_archive_asset_id(path: &str) -> Result<String, String> {
+    let Some(file_name) = path.strip_prefix("assets/") else {
+        return Err("custom asset path must be under assets/".to_string());
+    };
+    let Some(asset_id) = file_name.strip_suffix(".png") else {
+        return Err("custom asset must be a PNG".to_string());
+    };
+    if asset_id.contains('/')
+        || asset_id.len() != 64
+        || !asset_id
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err("custom asset archive path is invalid".to_string());
+    }
+    Ok(asset_id.to_string())
+}
+
+fn read_emoshelf_bundle(path: &Path) -> Result<ParsedEmoShelfBundle, String> {
     let metadata = std::fs::metadata(path).map_err(|e| e.to_string())?;
     if !metadata.is_file() || metadata.len() > MAX_EMOSHELF_BYTES {
         return Err(".emoshelf file is missing or exceeds 64 MiB".to_string());
@@ -527,7 +749,9 @@ fn preview_emoshelf_from_path(path: &Path) -> Result<EmoShelfImportPreview, Stri
 
     let mut manifest_json = None;
     let mut state_json = None;
-    let mut contains_assets = false;
+    let mut assets = BTreeMap::<String, Vec<u8>>::new();
+    let mut seen_names = HashSet::new();
+    let mut total_uncompressed = 0u64;
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index).map_err(|e| e.to_string())?;
         let enclosed = entry
@@ -543,6 +767,15 @@ fn preview_emoshelf_from_path(path: &Path) -> Result<EmoShelfImportPreview, Stri
             .to_str()
             .ok_or_else(|| "archive path is not valid UTF-8".to_string())?
             .replace('\\', "/");
+        if !seen_names.insert(name.clone()) {
+            return Err(format!("duplicate archive entry: {name}"));
+        }
+        total_uncompressed = total_uncompressed
+            .checked_add(entry.size())
+            .ok_or_else(|| "archive size overflow".to_string())?;
+        if total_uncompressed > MAX_EMOSHELF_BYTES {
+            return Err("archive expands beyond the 64 MiB safety limit".to_string());
+        }
         match name.as_str() {
             "manifest.json" => {
                 if manifest_json.is_some() {
@@ -557,12 +790,28 @@ fn preview_emoshelf_from_path(path: &Path) -> Result<EmoShelfImportPreview, Stri
                 state_json = Some(read_zip_text(&mut entry, MAX_STATE_JSON_BYTES)?);
             }
             _ if name.starts_with("assets/") => {
-                if entry.size() > MAX_EMOSHELF_BYTES {
-                    return Err("archive asset exceeds its safety limit".to_string());
+                if entry.is_dir() {
+                    if name != "assets/" {
+                        return Err(format!("unsupported archive directory: {name}"));
+                    }
+                    continue;
                 }
-                contains_assets |= !entry.is_dir();
+                if assets.len() >= MAX_CUSTOM_ASSETS {
+                    return Err(format!(
+                        ".emoshelf contains more than {MAX_CUSTOM_ASSETS} custom assets"
+                    ));
+                }
+                let asset_id = parse_archive_asset_id(&name)?;
+                let bytes = read_zip_bytes(&mut entry, MAX_CUSTOM_ASSET_BYTES)?;
+                if assets.insert(asset_id, bytes).is_some() {
+                    return Err("duplicate custom asset ID".to_string());
+                }
             }
-            _ if name.starts_with("licenses/") => {}
+            _ if name.starts_with("licenses/") => {
+                if !entry.is_dir() {
+                    let _ = read_zip_bytes(&mut entry, 256 * 1024)?;
+                }
+            }
             _ if entry.is_dir() => {}
             _ => return Err(format!("unsupported archive entry: {name}")),
         }
@@ -583,44 +832,92 @@ fn preview_emoshelf_from_path(path: &Path) -> Result<EmoShelfImportPreview, Stri
             manifest.schema_version
         ));
     }
-    if contains_assets {
-        return Err("custom assets require EmoShelf v0.4 or newer".to_string());
-    }
     let state_json = state_json.ok_or_else(|| "state.json is missing".to_string())?;
     let (schema_version, board_count, item_count) = state_schema_and_counts(&state_json)?;
-    let state_value: serde_json::Value =
-        serde_json::from_str(&state_json).map_err(|e| e.to_string())?;
-    if state_value
-        .get("customAssets")
-        .and_then(serde_json::Value::as_object)
-        .is_some_and(|assets| !assets.is_empty())
-    {
-        return Err("custom assets require EmoShelf v0.4 or newer".to_string());
-    }
     if schema_version != manifest.schema_version {
         return Err("manifest and state schema versions do not match".to_string());
     }
-    Ok(EmoShelfImportPreview {
-        manifest,
-        state_json,
-        board_count,
-        item_count,
+    let state_assets = state_custom_asset_manifests(&state_json)?;
+    let manifest_assets = manifest
+        .assets
+        .iter()
+        .map(|asset| (asset.id.clone(), asset.clone()))
+        .collect::<BTreeMap<_, _>>();
+    if manifest_assets.len() != manifest.assets.len() {
+        return Err("manifest contains duplicate custom asset IDs".to_string());
+    }
+    let state_asset_map = state_assets
+        .into_iter()
+        .map(|asset| (asset.id.clone(), asset))
+        .collect::<BTreeMap<_, _>>();
+    if state_asset_map != manifest_assets {
+        return Err("manifest custom assets do not match state.json".to_string());
+    }
+    if assets.len() != manifest_assets.len() {
+        return Err("archive custom assets do not match the manifest".to_string());
+    }
+    for (asset_id, manifest_asset) in &manifest_assets {
+        if manifest_asset.path != format!("assets/{asset_id}.png")
+            || manifest_asset.media_type != "image/png"
+            || manifest_asset.sha256 != *asset_id
+        {
+            return Err(format!("invalid manifest metadata for asset {asset_id}"));
+        }
+        let bytes = assets
+            .get(asset_id)
+            .ok_or_else(|| format!("custom asset {asset_id} is missing"))?;
+        let (width, height) = custom_assets::validate_png_bytes(asset_id, bytes)?;
+        if width != manifest_asset.width
+            || height != manifest_asset.height
+            || bytes.len() as u64 != manifest_asset.byte_length
+        {
+            return Err(format!("custom asset metadata mismatch for {asset_id}"));
+        }
+    }
+
+    let asset_count = assets.len();
+    Ok(ParsedEmoShelfBundle {
+        preview: EmoShelfImportPreview {
+            manifest,
+            state_json,
+            board_count,
+            item_count,
+            asset_count,
+        },
+        assets: assets.into_iter().collect(),
     })
+}
+
+fn preview_emoshelf_from_path(path: &Path) -> Result<EmoShelfImportPreview, String> {
+    read_emoshelf_bundle(path).map(|bundle| bundle.preview)
 }
 
 #[tauri::command]
 fn export_emoshelf(
+    app: tauri::AppHandle,
     path: String,
     state_json: String,
     exported_at: String,
 ) -> Result<String, String> {
-    write_emoshelf_to_path(Path::new(&path), &state_json, &exported_at)
-        .map(|path| path.to_string_lossy().into_owned())
+    let asset_directory = custom_assets::asset_dir(&app)?;
+    write_emoshelf_to_path(
+        Path::new(&path),
+        &state_json,
+        &exported_at,
+        Some(&asset_directory),
+    )
+    .map(|path| path.to_string_lossy().into_owned())
 }
 
 #[tauri::command]
 fn preview_emoshelf(path: String) -> Result<EmoShelfImportPreview, String> {
     preview_emoshelf_from_path(Path::new(&path))
+}
+
+#[tauri::command]
+fn install_emoshelf_assets(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let bundle = read_emoshelf_bundle(Path::new(&path))?;
+    custom_assets::install_archive_assets(&app, &bundle.assets)
 }
 
 #[tauri::command]
@@ -768,6 +1065,126 @@ fn paste_payload(
     press_ctrl_v()
 }
 
+fn clipboard_image_from_asset(
+    app: &tauri::AppHandle,
+    asset_id: &str,
+) -> Result<tauri::image::Image<'static>, String> {
+    let bytes = custom_assets::read_png_bytes(app, asset_id)?;
+    let decoded = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
+        .map_err(|error| format!("failed to decode custom image: {error}"))?
+        .to_rgba8();
+    let width = decoded.width();
+    let height = decoded.height();
+    Ok(tauri::image::Image::new_owned(
+        decoded.into_raw(),
+        width,
+        height,
+    ))
+}
+
+#[tauri::command]
+fn copy_image_asset(app: tauri::AppHandle, asset_id: String) -> Result<(), String> {
+    let image = clipboard_image_from_asset(&app, &asset_id)?;
+    app.clipboard()
+        .write_image(&image)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn paste_image_asset(
+    app: tauri::AppHandle,
+    asset_id: String,
+    keep_open: Option<bool>,
+) -> Result<(), String> {
+    copy_image_asset(app.clone(), asset_id)?;
+    if !keep_open.unwrap_or(false) {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.hide();
+        }
+    }
+    focus_paste_target(&app);
+    std::thread::sleep(PASTE_FOCUS_WAIT);
+    press_ctrl_v()
+}
+
+#[cfg(windows)]
+#[windows::core::implement(IDropSource)]
+struct ImageDropSource;
+
+#[cfg(windows)]
+impl IDropSource_Impl for ImageDropSource_Impl {
+    fn QueryContinueDrag(
+        &self,
+        escape_pressed: windows::core::BOOL,
+        key_state: MODIFIERKEYS_FLAGS,
+    ) -> windows::core::HRESULT {
+        if escape_pressed.as_bool() {
+            DRAGDROP_S_CANCEL
+        } else if key_state.0 & MK_LBUTTON.0 == 0 {
+            DRAGDROP_S_DROP
+        } else {
+            S_OK
+        }
+    }
+
+    fn GiveFeedback(&self, _effect: DROPEFFECT) -> windows::core::HRESULT {
+        DRAGDROP_S_USEDEFAULTCURSORS
+    }
+}
+
+#[cfg(windows)]
+fn drag_image_file(path: &Path) -> Result<(), String> {
+    let wide_path = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let mut item_id_list = std::ptr::null_mut::<ITEMIDLIST>();
+    // SAFETY: This worker thread owns its OLE apartment. The PIDL is released with
+    // CoTaskMemFree after DoDragDrop returns, and every pointer comes from Win32.
+    unsafe { OleInitialize(None) }.map_err(|error| error.to_string())?;
+    let result = (|| {
+        unsafe { SHParseDisplayName(PCWSTR(wide_path.as_ptr()), None, &mut item_id_list, 0, None) }
+            .map_err(|error| error.to_string())?;
+        let item_id_lists = [item_id_list as *const ITEMIDLIST];
+        let data_object: IDataObject =
+            unsafe { SHCreateDataObject(None, Some(&item_id_lists), None) }
+                .map_err(|error| error.to_string())?;
+        let drop_source: IDropSource = ImageDropSource.into();
+        let mut effect = DROPEFFECT_NONE;
+        let status =
+            unsafe { DoDragDrop(&data_object, &drop_source, DROPEFFECT_COPY, &mut effect) };
+        if status == DRAGDROP_S_DROP && effect.0 & DROPEFFECT_COPY.0 != 0 {
+            Ok(())
+        } else if status == DRAGDROP_S_CANCEL {
+            Err("image drag was cancelled".to_string())
+        } else {
+            status.ok().map_err(|error| error.to_string())?;
+            Err("drop target did not accept an image file copy".to_string())
+        }
+    })();
+    if !item_id_list.is_null() {
+        unsafe { CoTaskMemFree(Some(item_id_list.cast())) };
+    }
+    unsafe { OleUninitialize() };
+    result
+}
+
+#[cfg(windows)]
+#[tauri::command]
+fn drag_image_asset(app: tauri::AppHandle, asset_id: String) -> Result<(), String> {
+    let path = custom_assets::asset_path(&app, &asset_id)?;
+    std::thread::spawn(move || drag_image_file(&path))
+        .join()
+        .map_err(|_| "image drag worker panicked".to_string())?
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+fn drag_image_asset(_app: tauri::AppHandle, _asset_id: String) -> Result<(), String> {
+    Err("external image drag is currently supported on Windows only".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -878,12 +1295,24 @@ pub fn run() {
             save_state,
             set_global_shortcut,
             paste_payload,
+            copy_image_asset,
+            paste_image_asset,
+            drag_image_asset,
             export_emoshelf,
             preview_emoshelf,
+            install_emoshelf_assets,
             get_foreground_context,
             set_context_preferences,
             get_autostart,
-            set_autostart
+            set_autostart,
+            custom_assets::import_custom_asset,
+            custom_assets::read_custom_asset,
+            custom_assets::remove_custom_asset,
+            renderer_packs::list_renderer_packs,
+            renderer_packs::install_renderer_pack,
+            renderer_packs::set_renderer_pack_enabled,
+            renderer_packs::remove_renderer_pack,
+            renderer_packs::read_renderer_asset
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -892,6 +1321,7 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sha2::{Digest, Sha256};
     use std::path::Path;
 
     /// テスト用の一時ディレクトリ。標準ライブラリだけで衝突しない名前を生成し、
@@ -937,6 +1367,32 @@ mod tests {
             archive.write_all(content.as_bytes()).expect("write entry");
         }
         archive.finish().expect("finish archive");
+    }
+
+    fn write_test_archive_bytes(path: &Path, entries: &[(&str, &[u8])]) {
+        let file = std::fs::File::create(path).expect("create test archive");
+        let mut archive = ZipWriter::new(file);
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        for (name, content) in entries {
+            archive.start_file(*name, options).expect("start entry");
+            archive.write_all(content).expect("write entry");
+        }
+        archive.finish().expect("finish archive");
+    }
+
+    fn test_png(width: u32, height: u32) -> Vec<u8> {
+        use image::ImageEncoder as _;
+        let pixels = image::RgbaImage::from_pixel(width, height, image::Rgba([80, 40, 220, 255]));
+        let mut bytes = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut bytes)
+            .write_image(
+                pixels.as_raw(),
+                width,
+                height,
+                image::ExtendedColorType::Rgba8,
+            )
+            .expect("encode test png");
+        bytes
     }
 
     #[test]
@@ -1055,8 +1511,9 @@ mod tests {
     fn emoshelf_export_roundtrips_through_preview() {
         let dir = TempDir::new("emoshelf-roundtrip");
         let requested = dir.path().join("backup");
-        let written = write_emoshelf_to_path(&requested, VALID_V2_JSON, "2026-09-04T00:00:00.000Z")
-            .expect("export should succeed");
+        let written =
+            write_emoshelf_to_path(&requested, VALID_V2_JSON, "2026-09-04T00:00:00.000Z", None)
+                .expect("export should succeed");
 
         assert_eq!(
             written.extension().and_then(|value| value.to_str()),
@@ -1067,7 +1524,80 @@ mod tests {
         assert_eq!(preview.manifest.schema_version, 2);
         assert_eq!(preview.board_count, 1);
         assert_eq!(preview.item_count, 1);
+        assert_eq!(preview.asset_count, 0);
         assert_eq!(preview.state_json, VALID_V2_JSON);
+    }
+
+    #[test]
+    fn emoshelf_custom_assets_roundtrip_with_integrity_metadata() {
+        let dir = TempDir::new("emoshelf-assets");
+        let asset_directory = dir.path().join("assets-source");
+        std::fs::create_dir(&asset_directory).expect("asset dir");
+        let png = test_png(3, 4);
+        let asset_id = {
+            let mut hasher = Sha256::new();
+            hasher.update(&png);
+            hex::encode(hasher.finalize())
+        };
+        std::fs::write(asset_directory.join(format!("{asset_id}.png")), &png).expect("write asset");
+        let state = format!(
+            r#"{{"schemaVersion":2,"boards":[{{"id":"a","items":[{{"id":"x","type":"image","assetId":"{asset_id}"}}]}}],"recent":[],"customAssets":{{"{asset_id}":{{"id":"{asset_id}","fileName":"{asset_id}.png","mediaType":"image/png","width":3,"height":4,"byteLength":{},"sha256":"{asset_id}","addedAt":"2026-09-04T00:00:00Z"}}}}}}"#,
+            png.len()
+        );
+        let written = write_emoshelf_to_path(
+            &dir.path().join("assets.emoshelf"),
+            &state,
+            "2026-09-04T00:00:00Z",
+            Some(&asset_directory),
+        )
+        .expect("asset export");
+        let bundle = read_emoshelf_bundle(&written).expect("asset preview");
+        assert_eq!(bundle.preview.asset_count, 1);
+        assert_eq!(bundle.assets, vec![(asset_id, png)]);
+    }
+
+    #[test]
+    fn emoshelf_rejects_tampered_custom_asset_bytes() {
+        let dir = TempDir::new("emoshelf-asset-tamper");
+        let path = dir.path().join("tampered.emoshelf");
+        let png = test_png(2, 2);
+        let asset_id = {
+            let mut hasher = Sha256::new();
+            hasher.update(&png);
+            hex::encode(hasher.finalize())
+        };
+        let asset = EmoShelfAssetManifest {
+            id: asset_id.clone(),
+            path: format!("assets/{asset_id}.png"),
+            media_type: "image/png".to_string(),
+            width: 2,
+            height: 2,
+            byte_length: png.len() as u64,
+            sha256: asset_id.clone(),
+        };
+        let manifest = serde_json::to_vec(&EmoShelfManifest {
+            format: "emoshelf".to_string(),
+            format_version: 1,
+            schema_version: 2,
+            exported_at: "2026-09-04T00:00:00Z".to_string(),
+            app_version: "0.4.0".to_string(),
+            assets: vec![asset],
+        })
+        .expect("manifest");
+        let state = format!(
+            r#"{{"schemaVersion":2,"boards":[],"recent":[],"customAssets":{{"{asset_id}":{{"id":"{asset_id}","fileName":"{asset_id}.png","mediaType":"image/png","width":2,"height":2,"byteLength":{},"sha256":"{asset_id}","addedAt":"2026-09-04T00:00:00Z"}}}}}}"#,
+            png.len()
+        );
+        let asset_path = format!("assets/{asset_id}.png");
+        write_test_archive_bytes(
+            &path,
+            &[
+                ("manifest.json", manifest.as_slice()),
+                ("state.json", state.as_bytes()),
+                (asset_path.as_str(), b"tampered"),
+            ],
+        );
+        assert!(preview_emoshelf_from_path(&path).is_err());
     }
 
     #[test]
