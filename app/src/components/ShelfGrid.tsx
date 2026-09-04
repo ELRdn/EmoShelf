@@ -25,10 +25,24 @@ interface ShelfGridProps {
   locale: AppLocale;
   renderer: RendererId;
   editMode: boolean;
+  shelfGlow?: boolean;
   selectedId?: string;
   onSelect: (item: ShelfItem) => void;
   onRemove: (itemId: string) => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
+}
+
+function glowClass(item: ShelfItem, enabled: boolean): string {
+  if (!enabled || item.usage.useCount <= 0) {
+    return "";
+  }
+  if (item.usage.useCount >= 10) {
+    return " has-glow glow-high";
+  }
+  if (item.usage.useCount >= 4) {
+    return " has-glow glow-medium";
+  }
+  return " has-glow glow-low";
 }
 
 function SortableShelfItem({
@@ -38,6 +52,7 @@ function SortableShelfItem({
   selected,
   onSelect,
   onRemove,
+  shelfGlow,
 }: {
   item: ShelfItem;
   locale: AppLocale;
@@ -45,6 +60,7 @@ function SortableShelfItem({
   selected: boolean;
   onSelect: () => void;
   onRemove: () => void;
+  shelfGlow: boolean;
 }) {
   const {
     attributes,
@@ -59,7 +75,7 @@ function SortableShelfItem({
   const payload = item.type === "image" ? "🖼️" : item.payload;
   return (
     <li
-      className={`emoji-tile shelf-tile is-editable${selected ? " is-selected" : ""}${isDragging ? " is-dragging" : ""}`}
+      className={`emoji-tile shelf-tile is-editable${selected ? " is-selected" : ""}${isDragging ? " is-dragging" : ""}${glowClass(item, shelfGlow)}`}
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
     >
@@ -98,6 +114,7 @@ export function ShelfGrid({
   locale,
   renderer,
   editMode,
+  shelfGlow = false,
   selectedId,
   onSelect,
   onRemove,
@@ -143,6 +160,7 @@ export function ShelfGrid({
                 onSelect={() => onSelect(item)}
                 renderer={renderer}
                 selected={selectedId === item.id}
+                shelfGlow={shelfGlow}
               />
             ))}
           </ul>
@@ -159,7 +177,7 @@ export function ShelfGrid({
           <li key={item.id}>
             <button
               aria-label={item.display.name}
-              className={`emoji-tile shelf-tile${selectedId === item.id ? " is-selected" : ""}`}
+              className={`emoji-tile shelf-tile${selectedId === item.id ? " is-selected" : ""}${glowClass(item, shelfGlow)}`}
               onClick={() => onSelect(item)}
               title={item.display.name}
               type="button"

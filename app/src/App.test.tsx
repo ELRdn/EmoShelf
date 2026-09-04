@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -162,5 +162,78 @@ describe("EmoShelf UI", () => {
 
     await user.keyboard("{Control>}f{/Control}");
     expect(screen.getByPlaceholderText("絵文字を検索…")).toHaveFocus();
+  });
+
+  it("shows only locally tracked items in the Frequent view", async () => {
+    const user = userEvent.setup();
+    const initial = createInitialState();
+    const item = (id: string, payload: string, useCount: number) => ({
+      id,
+      type: "unicode" as const,
+      payload,
+      display: { name: payload, keywords: [] },
+      usage: { addedAt: "2026-01-01T00:00:00Z", useCount },
+    });
+    useShelfStore.setState({
+      ...initial,
+      loaded: true,
+      onboardingCompleted: true,
+      boards: [
+        {
+          id: "shelf",
+          name: "Shelf",
+          order: 0,
+          items: [item("used", "😂", 5), item("unused", "🫥", 0)],
+        },
+      ],
+      settings: { ...initial.settings, locale: "ja" },
+    });
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: /よく使う/ }));
+
+    expect(screen.getByRole("button", { name: "😂" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "🫥" })).toBeNull();
+  });
+
+  it("switches to the locally mapped Board for the foreground executable", async () => {
+    const initial = createInitialState();
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "get_foreground_context") {
+        return { executable: "code.exe", monitor: "DISPLAY2" };
+      }
+      if (command === "get_autostart") {
+        return false;
+      }
+      return null;
+    });
+    useShelfStore.setState({
+      ...initial,
+      loaded: true,
+      onboardingCompleted: true,
+      boards: [
+        { id: "default", name: "Default", order: 0, items: [] },
+        { id: "dev", name: "Dev", order: 1, items: [] },
+      ],
+      appBoardMappings: { "code.exe": "dev" },
+      settings: {
+        ...initial.settings,
+        locale: "ja",
+        defaultBoardId: "default",
+        perAppBoardsEnabled: true,
+      },
+    });
+    render(<App />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Dev/ })).toHaveAttribute(
+        "aria-current",
+        "page",
+      ),
+    );
+    expect(invoke).toHaveBeenCalledWith("set_context_preferences", {
+      perAppBoardsEnabled: true,
+      popupPositionBehavior: "active-monitor",
+    });
   });
 });

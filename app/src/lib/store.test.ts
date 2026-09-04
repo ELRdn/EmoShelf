@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type Board, createInitialState } from "./state";
-import { useShelfStore } from "./store";
+import { getFrequentItems, useShelfStore } from "./store";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
@@ -140,5 +140,143 @@ describe("shelf store", () => {
     });
     expect(useShelfStore.getState().settings.globalShortcut).toBe("Alt+E");
     expect(useShelfStore.getState().boards).toEqual([]);
+  });
+
+  it("accepts only a foreground executable basename for app mappings", () => {
+    useShelfStore.setState({ boards: [board("shelf", "Shelf", 0)] });
+
+    expect(
+      useShelfStore
+        .getState()
+        .setAppBoardMapping("C:\\Apps\\code.exe", "shelf"),
+    ).toBe(false);
+    expect(
+      useShelfStore.getState().setAppBoardMapping("code.exe", "missing"),
+    ).toBe(false);
+    expect(
+      useShelfStore.getState().setAppBoardMapping(" CODE.EXE ", "shelf"),
+    ).toBe(true);
+    expect(useShelfStore.getState().appBoardMappings).toEqual({
+      "code.exe": "shelf",
+    });
+
+    expect(useShelfStore.getState().setAppBoardMapping("code.exe")).toBe(true);
+    expect(useShelfStore.getState().appBoardMappings).toEqual({});
+  });
+
+  it("keeps all usage data unchanged when tracking is disabled", () => {
+    const initial = createInitialState();
+    const item = {
+      id: "joy",
+      type: "unicode" as const,
+      payload: "😂",
+      display: { name: "Joy", keywords: [] },
+      usage: { addedAt: "2026-01-01T00:00:00Z", useCount: 2 },
+    };
+    useShelfStore.setState({
+      boards: [{ ...board("shelf", "Shelf", 0), items: [item] }],
+      settings: { ...initial.settings, usageTrackingEnabled: false },
+    });
+
+    useShelfStore.getState().recordItemUse(item);
+    useShelfStore.getState().recordUse("🔥");
+
+    expect(useShelfStore.getState().boards[0]?.items[0]?.usage.useCount).toBe(
+      2,
+    );
+    expect(useShelfStore.getState().recent).toEqual([]);
+  });
+
+  it("builds a deduplicated frequent view without multiplying one use", () => {
+    const first = {
+      id: "joy-a",
+      type: "unicode" as const,
+      payload: "😂",
+      display: { name: "Joy", keywords: [] },
+      usage: { addedAt: "2026-01-01T00:00:00Z", useCount: 2 },
+    };
+    const second = {
+      ...first,
+      id: "joy-b",
+      usage: { ...first.usage, useCount: 3 },
+    };
+    const fire = {
+      ...first,
+      id: "fire",
+      payload: "🔥",
+      usage: { ...first.usage, useCount: 4 },
+    };
+    useShelfStore.setState({
+      boards: [
+        { ...board("a", "A", 0), items: [first, fire] },
+        { ...board("b", "B", 1), items: [second] },
+      ],
+    });
+
+    useShelfStore.getState().recordItemUse(second);
+
+    expect(
+      useShelfStore
+        .getState()
+        .boards.map((entry) => entry.items.map((item) => item.usage.useCount)),
+    ).toEqual([[2, 4], [4]]);
+    expect(
+      getFrequentItems(useShelfStore.getState().boards).map((item) => [
+        item.type === "image" ? item.assetId : item.payload,
+        item.usage.useCount,
+      ]),
+    ).toEqual([
+      ["😂", 6],
+      ["🔥", 4],
+    ]);
+  });
+
+  it("resets recents and counters while retaining added dates", () => {
+    const item = {
+      id: "joy",
+      type: "unicode" as const,
+      payload: "😂",
+      display: { name: "Joy", keywords: [] },
+      usage: {
+        addedAt: "2026-01-01T00:00:00Z",
+        lastUsedAt: "2026-02-01T00:00:00Z",
+        useCount: 8,
+      },
+    };
+    useShelfStore.setState({
+      boards: [{ ...board("shelf", "Shelf", 0), items: [item] }],
+      recent: [
+        {
+          id: "unicode:😂",
+          type: "unicode",
+          payload: "😂",
+          usedAt: "2026-02-01T00:00:00Z",
+        },
+      ],
+    });
+
+    useShelfStore.getState().resetUsageStatistics();
+
+    expect(useShelfStore.getState().recent).toEqual([]);
+    expect(useShelfStore.getState().boards[0]?.items[0]?.usage).toEqual({
+      addedAt: "2026-01-01T00:00:00Z",
+      useCount: 0,
+    });
+  });
+
+  it("persists autostart only after the native operation succeeds", async () => {
+    mockedInvoke.mockRejectedValueOnce(new Error("registry denied"));
+
+    await expect(useShelfStore.getState().setAutostart(true)).rejects.toThrow(
+      "registry denied",
+    );
+    expect(useShelfStore.getState().settings.autostart).toBe(false);
+
+    mockedInvoke.mockResolvedValueOnce(undefined);
+    await useShelfStore.getState().setAutostart(true);
+    expect(mockedInvoke).toHaveBeenCalledWith("set_autostart", {
+      enabled: true,
+    });
+    expect(useShelfStore.getState().settings.autostart).toBe(true);
   });
 });

@@ -5,7 +5,7 @@ EmoShelf 本体の Tauri 2 + React + TypeScript プロジェクト。
 画面仕様は [`DESIGN.md`](../DESIGN.md)、全体計画は [`ROADMAP.md`](../ROADMAP.md) を参照。
 
 Concept 2.5準拠のShelf UI、Compose Tray、sequence、キーボード操作、
-`.emoshelf` Import/Exportまで実装済みです。
+`.emoshelf` Import/Export、アプリ別Board、Frequent、Tray、Autostartまで実装済みです。
 
 ## 前提ツール
 
@@ -26,7 +26,7 @@ cd app
 pnpm install     # 依存インストール
 pnpm dev         # Vite のみ起動（UI 確認用）
 pnpm tauri dev   # デスクトップアプリとして起動
-pnpm check       # 型チェック + Biome + Vitest（21件）
+pnpm check       # 型チェック + Biome + Vitest（28件）
 pnpm test        # Vitest / React Testing Library / axe のみ実行
 pnpm build       # 本番フロントビルド
 pnpm tauri build # Windows インストーラー（NSIS / MSI）を生成
@@ -60,7 +60,7 @@ app/
 ├── docs/
 │   └── persistence.md # 永続化フォーマット定義
 ├── src-tauri/
-│   ├── src/lib.rs       # Rust 基盤（保存/復元・ペースト・ショートカット）
+│   ├── src/lib.rs       # Rust 基盤（保存/ペースト/前面アプリ/monitor/Tray）
 │   ├── tauri.conf.json  # カスタムフレーム・ウィンドウ・バンドル設定
 │   ├── capabilities/    # 権限設定
 │   └── icons/           # 仮アイコン（正式アイコンは v1.0 で差し替え）
@@ -86,10 +86,16 @@ app/
 | `paste_payload` | クリップボード書き込み → 対象へフォーカス復帰 → Ctrl+V |
 | `export_emoshelf` | schema v2状態を検証して`.emoshelf` ZIPへ保存 |
 | `preview_emoshelf` | ZIPを安全に検証し、適用前プレビューを返す |
+| `get_foreground_context` | 直近の前面実行ファイル名とmonitor IDだけを返す |
+| `set_context_preferences` | アプリ別Boardと表示位置の実行時設定を反映 |
+| `get_autostart` | Windows Autostartの実状態を取得 |
+| `set_autostart` | Windows Autostartを有効化／無効化 |
 
 使用プラグイン: `global-shortcut`（表示切替）・`clipboard-manager`（書き込み）・
 `dialog`（Import/Export先の選択）・`single-instance`（二重起動抑止）・
-`window-state`（サイズ/位置の自動復元）。
+`window-state`（サイズ/位置の自動復元）・`autostart`（Windowsサインイン時起動）。
+Autostart時はウィンドウを出さずTrayで待機する。Trayの左クリックまたはメニューから
+再表示でき、閉じるボタンは終了せずTrayへ格納する。
 ペーストのキー送出には `enigo` を使用。
 
 Twemojiの帰属とライセンスはルートの

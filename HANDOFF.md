@@ -1,6 +1,6 @@
 # EmoShelf 引き継ぎ書
 
-> 最終更新: 2026-09-04（基礎構築: DSH / Scarlet 🦊、Phase 0〜v0.2: Cyan/Codex）
+> 最終更新: 2026-09-04（基礎構築: DSH / Scarlet 🦊、Phase 0〜v0.3: Cyan/Codex）
 > このファイルは他エージェントへの引き継ぎ用。作業開始前にここから読むこと。
 
 ## 0. 読み順（5分コース）
@@ -40,6 +40,12 @@
   - `.emoshelf` ZIPのExport/Importプレビュー、ID再割当Merge、バックアップ付きReplace
   - ZIP件数/容量/UTF-8/パス/シンボリックリンク/future schema検証
   - Twemoji/Native selectorと全rendererの帰属表示。外部3種はPack導入まで選択不可
+- **v0.3 Context-aware Shelf**:
+  - 前面アプリは実行ファイル名とmonitor IDだけをRustで取得し、パス・タイトルは保持しない
+  - 初期OFFのアプリ別Board mapping、最後／既定Boardへのfallback、ローカル完結のopt-out
+  - 利用回数、Frequent、初期OFFのShelf Glow、利用追跡停止、統計リセット
+  - Autostart、Tray左クリック／メニュー、閉じる→Tray、二重起動前面化
+  - 操作中アプリのmonitorへ物理座標で表示、最後の位置を維持する選択肢
 - **v0.1 データ層**:
   - Rust: `load_state` / `save_state`（アトミック保存・`.bak` 復旧）/
     `set_global_shortcut` / `paste_payload`（クリップボード→非表示→Ctrl+V）
@@ -48,16 +54,16 @@
     emojibase全1949件＋日英検索、ペーストAPI＋コピーフォールバック
   - schema v2: 判別可能ShelfItem、型付きRecent、v1移行、未知フィールド保持、未来schema上書き防止
 - **Rust 基盤検証**: lockfile 固定のコンパイル、Clippy（警告をエラー扱い）、
-  永続化・ショートカット・`.emoshelf`の単体テスト12件
+  永続化・ショートカット・`.emoshelf`・前面実行ファイル名の単体テスト13件
 - **Windows 実機検証**: release ビルドの起動、`Alt+E` による表示／非表示、
   二重起動時の既存ウィンドウ前面化を確認。NSIS `.exe` と MSI `.msi` も生成済み
-- **フロント検証**: TypeScript、Biome、Vitest/React Testing Library/axe（21件）、production build
-- `ROADMAP.md` のPhase 0〜v0.2チェックボックスは受け入れ結果へ同期済み
+- **フロント検証**: TypeScript、Biome、Vitest/React Testing Library/axe（28件）、production build
+- `ROADMAP.md` のPhase 0〜v0.3チェックボックスは受け入れ結果へ同期済み
 
 ### 次の作業
 
-- v0.3: アプリ別Board、Frequent/Glow、履歴制御、Tray/Autostart、monitor/DPI
-- v0.4以降: カスタム画像/Renderer Pack、品質・Updater
+- v0.4: カスタム画像、画像Board、画像clipboard/drag、Renderer Pack
+- v0.5以降: Accessibility、性能、復旧、Updater、120/144Hz以上の実機確認
 - Viteの500kB超チャンク警告は未解消。v1.0検証ゲートまでにデータ・locale・画面単位で分割する
 
 ## 3. 主要ファイル
@@ -90,7 +96,7 @@
         ├── Cargo.toml                  # プラグイン・enigo 追加済み
         ├── tauri.conf.json             # 製品名 EmoShelf、880x660、カスタムフレーム
         ├── capabilities/default.json   # core/opener/clipboard/dialog
-        ├── src/lib.rs                  # Rust 基盤（コマンド6件）
+        ├── src/lib.rs                  # Rust 基盤（コマンド10件）
         └── icons/                      # テンプレ既定の仮アイコン
 ```
 
@@ -116,8 +122,8 @@ cargo check --locked
 ## 5. 既知の注意点（必読）
 
 1. **Rust はローカル検証済み**: `cargo fmt --check`、警告をエラー扱いした Clippy、
-   単体テスト、`cargo check --locked` を Phase 0 の完了条件とする。
-   永続化とショートカット解析には Rust 単体テスト 9 件がある。
+   単体テスト、`cargo check --locked` を各PRの完了条件とする。
+   永続化・ショートカット・交換形式・前面アプリ境界に Rust 単体テスト 13 件がある。
 2. **`Cargo.lock` は同期・コミット必須**: `Cargo.toml` の全直接依存を含む状態で管理し、
    CI でも `--locked` を指定して意図しない依存更新を拒否する。
 3. **esbuild の postinstall を無効化している**（`app/.npmrc` の `never-built-dependencies`）:
@@ -149,13 +155,13 @@ cargo check --locked
 | ショートカット登録 | Rust が所有、フロントは設定値の通知のみ | 二重登録・競合の単一管理点化 |
 | ペースト方式 | クリップボード＋enigo の Ctrl+V | 標準的構成。失敗時は Copy only に自動フォールバック |
 
-## 7. 次の作業の推奨順序（v0.3）
+## 7. 次の作業の推奨順序（v0.4）
 
-1. 前面アプリの実行ファイル名とmonitor IDだけをRustで取得
-2. 初期OFFのアプリ別Board mappingとfallback
-3. Frequent、Shelf Glow、履歴リセット、利用追跡OFF
-4. Autostart、System Tray、表示位置、DPI対応
-5. x64実機とCIでWindows統合を回帰確認
+1. PNG/WebP/SVGの制限付きImportとハッシュID保存
+2. SVG sanitizeと正規化PNG、画像clipboardとOLE drag
+3. 参照中assetを保護する削除と`.emoshelf` asset統合
+4. 署名・hash検証付きRenderer Pack管理
+5. x64実機とCIでUnicode workflowを回帰確認
 
 ## 8. 規約
 

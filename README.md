@@ -232,7 +232,7 @@ The onboarding itself teaches the product's main mental model: **put emojis on y
 
 ---
 
-## Planned architecture
+## Current architecture
 
 EmoShelf is planned as a Windows-first desktop app.
 
@@ -245,8 +245,9 @@ Tauri 2
 ├── Global Shortcut
 ├── Clipboard / Paste integration
 ├── System Tray
+├── Start with Windows
 ├── Local persistence
-└── Foreground-window integration (later)
+└── Privacy-safe foreground app / monitor integration
 ```
 
 The project should stay small enough to feel native and open quickly.

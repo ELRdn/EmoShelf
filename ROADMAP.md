@@ -333,11 +333,11 @@ Power users can use EmoShelf almost entirely from the keyboard and can save mult
 
 ## Per-App Boards
 
-- [ ] Detect foreground application
-- [ ] Optional app → Board mapping
-- [ ] Fallback to last/default Board
-- [ ] Privacy-friendly local implementation
-- [ ] Easy opt-out
+- [x] Detect foreground application
+- [x] Optional app → Board mapping
+- [x] Fallback to last/default Board
+- [x] Privacy-friendly local implementation
+- [x] Easy opt-out
 
 Examples:
 
@@ -350,22 +350,25 @@ Browser → My Shelf
 
 ## Usage intelligence — local only
 
-- [ ] Track local usage counts
-- [ ] Frequently used view
-- [ ] Optional Shelf Glow
-- [ ] Reset usage statistics
-- [ ] Disable usage tracking
+- [x] Track local usage counts
+- [x] Frequently used view
+- [x] Optional Shelf Glow
+- [x] Reset usage statistics
+- [x] Disable usage tracking
 
 No remote analytics are required for this feature.
 
 ## System integration
 
-- [ ] Start with Windows
-- [ ] Tray refinements
-- [ ] Better multi-monitor positioning
-- [ ] Remember popup position behavior
-- [ ] DPI / scaling validation
+- [x] Start with Windows
+- [x] Tray refinements
+- [x] Better multi-monitor positioning
+- [x] Remember popup position behavior
+- [x] DPI / scaling validation
 - [ ] High refresh-rate motion checks
+
+実装は物理monitor座標とwindow DPIを基準にし、現在の60Hz・2画面ホストで実機確認済み。
+120/144Hz以上の最終視覚確認はv0.5の品質ゲートで行う。
 
 ### Exit criteria for v0.3
 
