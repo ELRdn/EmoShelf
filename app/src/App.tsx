@@ -23,11 +23,19 @@ import {
   findByEmoji,
   getCatalog,
   getCategories,
+  isEmojiCatalogLoaded,
+  loadEmojiCatalogData,
   searchCatalog,
   toDisplayMetadata,
 } from "./lib/emoji";
 import { resolveLocale, translate } from "./lib/i18n";
 import { copyPayload, pastePayload } from "./lib/paste";
+import {
+  type ClientPerformanceSnapshot,
+  getClientPerformanceSnapshot,
+  measureCatalogSearch,
+  recordCatalogReady,
+} from "./lib/performance";
 import {
   listRendererPacks,
   type RendererPackRecord,
@@ -39,6 +47,11 @@ import {
   snapshotState,
   useShelfStore,
 } from "./lib/store";
+import {
+  type AvailableUpdate,
+  checkForUpdate,
+  installAvailableUpdate,
+} from "./lib/updates";
 
 type CategoryId = number | "all" | "recent";
 type Modal =
@@ -74,6 +87,11 @@ interface ToastState {
   id: number;
   message: string;
   action?: { label: string; run: () => void };
+}
+
+interface NativePerformanceSnapshot {
+  hotkeyShowSamples: number;
+  hotkeyShowP95Ms: number | null;
 }
 
 function selectionFromCatalog(entry: CatalogEntry): Selection {
@@ -139,7 +157,7 @@ function TitleBar({
         </span>
         <strong data-tauri-drag-region>EmoShelf</strong>
         <span className="version-pill" data-tauri-drag-region>
-          v0.4
+          v0.5
         </span>
       </div>
       <div className="window-controls">
@@ -191,9 +209,21 @@ function ModalShell({
   children: React.ReactNode;
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    const focusable = dialog?.querySelector<HTMLElement>(
+      "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex='-1'])",
+    );
+    focusable?.focus();
+    return () => previousFocus?.focus();
+  }, []);
+
   return (
     <dialog
-      aria-label={title}
+      aria-labelledby="modal-title"
       className="modal-backdrop"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
@@ -202,22 +232,38 @@ function ModalShell({
       }}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
+          event.preventDefault();
           onClose();
+          return;
+        }
+        if (event.key === "Tab") {
+          const focusable = Array.from(
+            event.currentTarget.querySelectorAll<HTMLElement>(
+              "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex='-1'])",
+            ),
+          );
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (!first || !last) {
+            return;
+          }
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          }
         }
       }}
       open
+      ref={dialogRef}
     >
-      <section
-        aria-labelledby="modal-title"
-        aria-modal="true"
-        className="modal-card"
-        onMouseDown={(event) => event.stopPropagation()}
-        role="dialog"
-      >
+      <section className="modal-card">
         <header>
           <h2 id="modal-title">{title}</h2>
           <button
-            aria-label="Close"
+            aria-label={`Close / 閉じる: ${title}`}
             className="icon-button"
             onClick={onClose}
             type="button"
@@ -244,6 +290,9 @@ function App() {
   const loadError = useShelfStore((state) => state.loadError);
   const saveError = useShelfStore((state) => state.saveError);
   const persistenceBlocked = useShelfStore((state) => state.persistenceBlocked);
+  const recoveredFromBackup = useShelfStore(
+    (state) => state.recoveredFromBackup,
+  );
   const locale = resolveLocale(settings.locale);
   const [activeBoardId, setActiveBoardId] = useState<string>();
   const [catalogMode, setCatalogMode] = useState(false);
@@ -268,8 +317,35 @@ function App() {
     useState<ForegroundContext>();
   const [integrationError, setIntegrationError] = useState("");
   const [rendererPacks, setRendererPacks] = useState<RendererPackRecord[]>([]);
+  const [catalogReady, setCatalogReady] = useState(isEmojiCatalogLoaded);
+  const [catalogError, setCatalogError] = useState("");
+  const [updaterConfigured, setUpdaterConfigured] = useState(false);
+  const [updatePhase, setUpdatePhase] = useState<
+    "idle" | "checking" | "current" | "available" | "installing" | "error"
+  >("idle");
+  const [availableUpdate, setAvailableUpdate] = useState<AvailableUpdate>();
+  const [clientPerformance, setClientPerformance] =
+    useState<ClientPerformanceSnapshot>();
+  const [nativePerformance, setNativePerformance] =
+    useState<NativePerformanceSnapshot>();
   const toastId = useRef(0);
+  const updateCheckStarted = useRef(false);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (catalogReady) {
+      return;
+    }
+    void loadEmojiCatalogData()
+      .then(() => setCatalogReady(true))
+      .catch((error) => setCatalogError(String(error)));
+  }, [catalogReady]);
+
+  useEffect(() => {
+    if (loaded && catalogReady) {
+      recordCatalogReady();
+    }
+  }, [catalogReady, loaded]);
 
   const refreshRendererPacks = useCallback(async () => {
     try {
@@ -313,11 +389,17 @@ function App() {
   const displayedShelfItems = frequentMode
     ? frequentItems
     : (activeBoard?.items ?? []);
-  const catalog = useMemo(() => getCatalog(locale), [locale]);
-  const categories = useMemo(() => getCategories(locale), [locale]);
+  const catalog = useMemo(
+    () => (catalogReady ? getCatalog(locale) : []),
+    [catalogReady, locale],
+  );
+  const categories = useMemo(
+    () => (catalogReady ? getCategories(locale) : []),
+    [catalogReady, locale],
+  );
   const catalogEntries = useMemo(() => {
     if (query.trim()) {
-      return searchCatalog(query, 1949, locale);
+      return measureCatalogSearch(() => searchCatalog(query, 1949, locale));
     }
     if (category === "recent") {
       return recent.flatMap((entry) => {
@@ -332,22 +414,35 @@ function App() {
       ? catalog
       : catalog.filter((entry) => entry.group === category);
   }, [catalog, category, locale, query, recent]);
-  const navigableSelections = useMemo(
-    () =>
-      customMode
-        ? customAssetList.map((asset) => selectionFromAsset(asset, locale))
-        : catalogMode
-          ? catalogEntries.map(selectionFromCatalog)
-          : displayedShelfItems.map((item) => selectionFromItem(item, locale)),
-    [
-      catalogEntries,
-      catalogMode,
-      customAssetList,
-      customMode,
-      displayedShelfItems,
-      locale,
-    ],
-  );
+
+  const refreshPerformance = useCallback(async () => {
+    setClientPerformance(getClientPerformanceSnapshot());
+    try {
+      setNativePerformance(
+        await invoke<NativePerformanceSnapshot>("get_performance_snapshot"),
+      );
+    } catch (error) {
+      setIntegrationError(String(error));
+    }
+  }, []);
+  const navigableSelections = useMemo(() => {
+    if (!catalogReady) {
+      return [];
+    }
+    return customMode
+      ? customAssetList.map((asset) => selectionFromAsset(asset, locale))
+      : catalogMode
+        ? catalogEntries.map(selectionFromCatalog)
+        : displayedShelfItems.map((item) => selectionFromItem(item, locale));
+  }, [
+    catalogEntries,
+    catalogReady,
+    catalogMode,
+    customAssetList,
+    customMode,
+    displayedShelfItems,
+    locale,
+  ]);
 
   const showToast = useCallback(
     (message: string, action?: ToastState["action"]) => {
@@ -364,6 +459,81 @@ function App() {
     },
     [],
   );
+
+  const installUpdate = useCallback(async () => {
+    if (!window.confirm(translate(locale, "updatePermission"))) {
+      return;
+    }
+    setUpdatePhase("installing");
+    try {
+      await installAvailableUpdate();
+    } catch (error) {
+      setUpdatePhase("error");
+      setIntegrationError(
+        `${translate(locale, "updateFailed")}: ${String(error)}`,
+      );
+    }
+  }, [locale]);
+
+  const checkUpdates = useCallback(
+    async (silent = false) => {
+      if (!silent) {
+        setUpdatePhase("checking");
+      }
+      try {
+        const update = await checkForUpdate();
+        setAvailableUpdate(update ?? undefined);
+        setUpdatePhase(update ? "available" : "current");
+        if (update && silent) {
+          showToast(
+            translate(locale, "updateAvailable").replace(
+              "{version}",
+              update.version,
+            ),
+            {
+              label: translate(locale, "installUpdate"),
+              run: () => void installUpdate(),
+            },
+          );
+        }
+      } catch (error) {
+        setUpdatePhase("error");
+        if (!silent) {
+          setIntegrationError(
+            `${translate(locale, "updateFailed")}: ${String(error)}`,
+          );
+        }
+      }
+    },
+    [installUpdate, locale, showToast],
+  );
+
+  useEffect(() => {
+    if (!loaded || updateCheckStarted.current) {
+      return;
+    }
+    updateCheckStarted.current = true;
+    let cancelled = false;
+    let timer: number | undefined;
+    void invoke<boolean>("updater_available")
+      .then((configured) => {
+        if (cancelled) {
+          return;
+        }
+        setUpdaterConfigured(configured);
+        if (configured) {
+          timer = window.setTimeout(() => void checkUpdates(true), 5000);
+        }
+      })
+      .catch(() => setUpdaterConfigured(false));
+    return () => {
+      cancelled = true;
+      updateCheckStarted.current = false;
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [checkUpdates, loaded]);
 
   useEffect(() => {
     if (!activeBoardId || !boards.some((board) => board.id === activeBoardId)) {
@@ -724,17 +894,20 @@ function App() {
     showToast,
   ]);
 
-  if (!loaded) {
+  if (!loaded || !catalogReady) {
     return (
       <div className="app-shell">
+        <a className="skip-link" href="#main-content">
+          {translate(locale, "skipToContent")}
+        </a>
         <TitleBar
           locale={locale}
           onTogglePinned={() => undefined}
           pinned={false}
         />
-        <main className="loading-state">
-          <span className="loading-orbit" />
-          {translate(locale, "loading")}
+        <main className="loading-state" id="main-content">
+          <span aria-hidden="true" className="loading-orbit" />
+          {catalogError || translate(locale, "loading")}
         </main>
       </div>
     );
@@ -743,6 +916,9 @@ function App() {
   if (!onboardingCompleted) {
     return (
       <div className="app-shell">
+        <a className="skip-link" href="#main-content">
+          {translate(locale, "skipToContent")}
+        </a>
         <TitleBar
           locale={locale}
           onTogglePinned={() =>
@@ -927,6 +1103,9 @@ function App() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">
+        {translate(locale, "skipToContent")}
+      </a>
       <TitleBar
         locale={locale}
         onTogglePinned={() =>
@@ -935,13 +1114,40 @@ function App() {
         pinned={settings.pinned}
       />
 
-      <main className="shelf-app">
+      <main className="shelf-app" id="main-content">
+        {recoveredFromBackup ? (
+          <div className="recovery-banner" role="status">
+            <span aria-hidden="true">✓</span>
+            <p>{translate(locale, "recoveredBackup")}</p>
+            <button
+              aria-label={translate(locale, "dismiss")}
+              onClick={() => useShelfStore.getState().clearRecoveryNotice()}
+              type="button"
+            >
+              ×
+            </button>
+          </div>
+        ) : null}
         {(loadError || saveError || integrationError) && (
           <div className="error-banner" role="alert">
-            <span>!</span>
+            <span aria-hidden="true">!</span>
             <p>{loadError ?? saveError ?? integrationError}</p>
+            {saveError ? (
+              <button
+                onClick={() => {
+                  void useShelfStore
+                    .getState()
+                    .persistNow()
+                    .catch(() => undefined);
+                }}
+                type="button"
+              >
+                {translate(locale, "retrySave")}
+              </button>
+            ) : null}
             {saveError || integrationError ? (
               <button
+                aria-label={translate(locale, "dismiss")}
                 onClick={() => {
                   useShelfStore.getState().clearSaveError();
                   setIntegrationError("");
@@ -2163,6 +2369,156 @@ function App() {
               }}
               state={snapshotState(useShelfStore.getState())}
             />
+            <section
+              aria-labelledby="backup-settings-title"
+              className="settings-section"
+            >
+              <h3 id="backup-settings-title">
+                {translate(locale, "settingsBackup")}
+              </h3>
+              <div className="settings-button-row">
+                <button
+                  className="quiet-button"
+                  onClick={() => {
+                    void useShelfStore
+                      .getState()
+                      .createSettingsBackup()
+                      .then(
+                        () =>
+                          showToast(translate(locale, "settingsBackupCreated")),
+                        (error) => setIntegrationError(String(error)),
+                      );
+                  }}
+                  type="button"
+                >
+                  {translate(locale, "createSettingsBackup")}
+                </button>
+                <button
+                  className="quiet-button"
+                  onClick={() => {
+                    void useShelfStore
+                      .getState()
+                      .restoreSettingsBackup()
+                      .then(
+                        (restored) =>
+                          showToast(
+                            translate(
+                              locale,
+                              restored
+                                ? "settingsBackupRestored"
+                                : "settingsBackupMissing",
+                            ),
+                          ),
+                        (error) => setIntegrationError(String(error)),
+                      );
+                  }}
+                  type="button"
+                >
+                  {translate(locale, "restoreSettingsBackup")}
+                </button>
+              </div>
+            </section>
+            <section
+              aria-labelledby="update-settings-title"
+              className="settings-section"
+            >
+              <h3 id="update-settings-title">{translate(locale, "updates")}</h3>
+              <p className="settings-note">
+                {updaterConfigured
+                  ? translate(locale, "updatePermission")
+                  : translate(locale, "updateUnavailableBuild")}
+              </p>
+              <div className="settings-button-row">
+                <button
+                  className="quiet-button"
+                  disabled={
+                    !updaterConfigured ||
+                    updatePhase === "checking" ||
+                    updatePhase === "installing"
+                  }
+                  onClick={() => void checkUpdates(false)}
+                  type="button"
+                >
+                  {updatePhase === "checking"
+                    ? translate(locale, "checkingUpdates")
+                    : translate(locale, "checkUpdates")}
+                </button>
+                {availableUpdate ? (
+                  <button
+                    className="primary-button"
+                    disabled={updatePhase === "installing"}
+                    onClick={() => void installUpdate()}
+                    type="button"
+                  >
+                    {updatePhase === "installing"
+                      ? translate(locale, "installingUpdate")
+                      : translate(locale, "installUpdate")}
+                  </button>
+                ) : null}
+              </div>
+              {updatePhase === "current" ? (
+                <p className="settings-note" role="status">
+                  {translate(locale, "upToDate")}
+                </p>
+              ) : null}
+              {availableUpdate ? (
+                <p className="settings-note" role="status">
+                  {translate(locale, "updateAvailable").replace(
+                    "{version}",
+                    availableUpdate.version,
+                  )}
+                </p>
+              ) : null}
+            </section>
+            <section
+              aria-labelledby="performance-settings-title"
+              className="settings-section"
+            >
+              <h3 id="performance-settings-title">
+                {translate(locale, "diagnostics")}
+              </h3>
+              <dl className="performance-metrics">
+                <div>
+                  <dt>{translate(locale, "startupMetric")}</dt>
+                  <dd>
+                    {clientPerformance?.startupToReadyMs === undefined
+                      ? translate(locale, "noSamples")
+                      : `${clientPerformance.startupToReadyMs.toFixed(1)} ms`}
+                  </dd>
+                </div>
+                <div>
+                  <dt>{translate(locale, "searchMetric")}</dt>
+                  <dd>
+                    {clientPerformance?.searchP95Ms === undefined
+                      ? translate(locale, "noSamples")
+                      : `${clientPerformance.searchP95Ms.toFixed(1)} ms (${clientPerformance.searchSamples})`}
+                  </dd>
+                </div>
+                <div>
+                  <dt>{translate(locale, "hotkeyMetric")}</dt>
+                  <dd>
+                    {nativePerformance?.hotkeyShowP95Ms == null
+                      ? translate(locale, "noSamples")
+                      : `${nativePerformance.hotkeyShowP95Ms.toFixed(1)} ms (${nativePerformance.hotkeyShowSamples})`}
+                  </dd>
+                </div>
+                <div>
+                  <dt>{translate(locale, "memoryMetric")}</dt>
+                  <dd>
+                    {clientPerformance?.usedJavaScriptHeapMb === undefined
+                      ? translate(locale, "noSamples")
+                      : `${clientPerformance.usedJavaScriptHeapMb.toFixed(1)} MiB`}
+                  </dd>
+                </div>
+              </dl>
+              <button
+                className="quiet-button settings-inline-action"
+                onClick={() => void refreshPerformance()}
+                type="button"
+              >
+                {translate(locale, "refreshDiagnostics")}
+              </button>
+            </section>
             <div className="settings-danger-zone">
               <button
                 className="quiet-button"
@@ -2192,7 +2548,7 @@ function App() {
       ) : null}
 
       {toast ? (
-        <div className="toast" role="status">
+        <div aria-atomic="true" className="toast" role="status">
           <span>{toast.message}</span>
           {toast.action ? (
             <button

@@ -7,6 +7,8 @@ EmoShelf 本体の Tauri 2 + React + TypeScript プロジェクト。
 Concept 2.5準拠のShelf UI、Compose Tray、sequence、キーボード操作、
 `.emoshelf` Import/Export、アプリ別Board、Frequent、Tray、Autostart、
 カスタム画像、署名付きRenderer Pack管理まで実装済みです。
+v0.5では復旧通知、設定バックアップ、明示同意型Updater、アクセシビリティ監査、
+性能診断、500KiB JavaScript bundle gateも追加しています。
 
 ## 前提ツール
 
@@ -27,7 +29,7 @@ cd app
 pnpm install     # 依存インストール
 pnpm dev         # Vite のみ起動（UI 確認用）
 pnpm tauri dev   # デスクトップアプリとして起動
-pnpm check       # 型チェック + Biome + Vitest（42件）
+pnpm check       # 型チェック + Biome + Vitest（48件）
 pnpm test        # Vitest / React Testing Library / axe のみ実行
 pnpm build       # 本番フロントビルド
 pnpm tauri build # Windows インストーラー（NSIS / MSI）を生成
@@ -54,14 +56,17 @@ app/
 │   └── lib/
 │       ├── state.ts   # アプリ状態モデル（正本）
 │       ├── store.ts   # zustand ストア（操作・永続化・設定反映）
-│       ├── emoji.ts   # 絵文字カタログ読み込み・検索
+│       ├── emoji.ts   # 分割済み絵文字カタログ読み込み・検索
+│       ├── performance.ts # 起動・検索・JS heap計測
+│       ├── updates.ts # 確認と明示同意後の更新適用を分離
 │       ├── paste.ts   # ペースト実行＋コピーフォールバック
 │       ├── transfer.ts # .emoshelf交換と安全なMerge
 │       ├── customAssets.ts # カスタム画像IPC
 │       ├── rendererPacks.ts # 署名付きPack IPC
 │       └── i18n.ts    # 日本語／英語UI文言
 ├── docs/
-│   └── persistence.md # 永続化フォーマット定義
+│   ├── persistence.md # 永続化フォーマット定義
+│   └── updater.md     # 更新同意・署名鍵・公開条件
 ├── src-tauri/
 │   ├── src/lib.rs       # Rust 基盤（保存/ペースト/前面アプリ/monitor/Tray）
 │   ├── src/custom_assets.rs # 画像検証・PNG正規化・ローカル保存
@@ -87,6 +92,11 @@ app/
 | -------- | ---- |
 | `load_state` | `state.json` 読み込み（破損時は `.bak` から復旧、無ければ `null`） |
 | `save_state` | アトミック保存（旧ファイルは `.bak` へ退避） |
+| `take_recovery_notice` | `.bak`復旧を一度だけUIへ通知 |
+| `create_settings_backup` | 検証済み設定だけの復旧スナップショットを保存 |
+| `load_settings_backup` | 設定スナップショットを検証して読み込む |
+| `updater_available` | 署名検証鍵を持つ正式Updaterビルドか判定 |
+| `get_performance_snapshot` | ホットキー表示要求のsample数とp95を取得 |
 | `set_global_shortcut` | グローバルショートカット差し替え |
 | `paste_payload` | クリップボード書き込み → 対象へフォーカス復帰 → Ctrl+V |
 | `export_emoshelf` | schema v2状態を検証して`.emoshelf` ZIPへ保存 |
@@ -114,6 +124,19 @@ app/
 Autostart時はウィンドウを出さずTrayで待機する。Trayの左クリックまたはメニューから
 再表示でき、閉じるボタンは終了せずTrayへ格納する。
 ペーストのキー送出には `enigo` を使用。
+
+## 品質・Updater
+
+- 絵文字データは`public/emoji-data/`へ分離し、Vite出力のJavaScript chunkが500KiBを超えると
+  `pnpm build`を失敗させる。1949件のDOM描画は仮想化済み。
+- 設定画面の診断には起動→操作可能、検索p95、ホットキー表示要求p95、JS heapを表示する。
+- `state.json`と`.bak`が両方壊れている場合は読み取り専用へ移行し、空状態で上書きしない。
+- Updaterの同意・鍵・公開条件は[`docs/updater.md`](docs/updater.md)を参照。
+- 正式Updaterを有効にする場合だけ、公開鍵をコンパイル時に設定する。
+
+```text
+EMOSHELF_UPDATER_PUBLIC_KEY
+```
 
 ## カスタム画像とRenderer Pack
 

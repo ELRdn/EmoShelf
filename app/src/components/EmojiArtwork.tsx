@@ -65,6 +65,8 @@ export function EmojiArtwork({
         loading="lazy"
         onError={() => setFailedSource(source)}
         src={source}
+        height={64}
+        width={64}
       />
     );
   }

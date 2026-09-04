@@ -1,9 +1,4 @@
 import type { Emoji } from "emojibase";
-import enData from "emojibase-data/en/data.json";
-import enMessages from "emojibase-data/en/messages.json";
-import enShortcodes from "emojibase-data/en/shortcodes/cldr.json";
-import jaData from "emojibase-data/ja/data.json";
-import jaMessages from "emojibase-data/ja/messages.json";
 import type { DisplayMetadata } from "./state";
 
 export type AppLocale = "ja" | "en";
@@ -29,6 +24,26 @@ export interface CategoryMeta {
   icon: string;
 }
 
+interface GroupMessage {
+  key: string;
+  message: string;
+  order: number;
+}
+
+interface MessageSet {
+  groups: GroupMessage[];
+}
+
+type RawEmoji = Emoji & { group?: number };
+
+interface CatalogData {
+  enData: RawEmoji[];
+  jaData: RawEmoji[];
+  enMessages: MessageSet;
+  jaMessages: MessageSet;
+  enShortcodes: Record<string, string | string[]>;
+}
+
 const CATEGORY_ICONS = [
   "🙂",
   "👋",
@@ -42,8 +57,67 @@ const CATEGORY_ICONS = [
   "🏳️",
 ];
 
-type MessageSet = typeof enMessages;
-type RawEmoji = Emoji & { group?: number };
+const DATA_URLS = {
+  enData: "/emoji-data/en-data.json",
+  jaData: "/emoji-data/ja-data.json",
+  enMessages: "/emoji-data/en-messages.json",
+  jaMessages: "/emoji-data/ja-messages.json",
+  enShortcodes: "/emoji-data/en-shortcodes.json",
+} as const;
+
+let catalogData: CatalogData | undefined;
+let catalogDataPromise: Promise<void> | undefined;
+const cache = new Map<AppLocale, CatalogEntry[]>();
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const response = await fetch(url, { cache: "force-cache" });
+  if (!response.ok) {
+    throw new Error(`Emoji catalog request failed (${response.status})`);
+  }
+  return (await response.json()) as T;
+}
+
+/** Load large locale payloads as static assets instead of JavaScript imports. */
+export function loadEmojiCatalogData(): Promise<void> {
+  if (catalogData) {
+    return Promise.resolve();
+  }
+  if (!catalogDataPromise) {
+    catalogDataPromise = Promise.all([
+      fetchJson<RawEmoji[]>(DATA_URLS.enData),
+      fetchJson<RawEmoji[]>(DATA_URLS.jaData),
+      fetchJson<MessageSet>(DATA_URLS.enMessages),
+      fetchJson<MessageSet>(DATA_URLS.jaMessages),
+      fetchJson<Record<string, string | string[]>>(DATA_URLS.enShortcodes),
+    ])
+      .then(([enData, jaData, enMessages, jaMessages, enShortcodes]) => {
+        catalogData = {
+          enData,
+          jaData,
+          enMessages,
+          jaMessages,
+          enShortcodes,
+        };
+        cache.clear();
+      })
+      .catch((error) => {
+        catalogDataPromise = undefined;
+        throw error;
+      });
+  }
+  return catalogDataPromise;
+}
+
+export function isEmojiCatalogLoaded(): boolean {
+  return catalogData !== undefined;
+}
+
+function loadedData(): CatalogData {
+  if (!catalogData) {
+    throw new Error("Emoji catalog has not finished loading");
+  }
+  return catalogData;
+}
 
 function toCodepoint(hexcode: string): string {
   return hexcode
@@ -53,14 +127,14 @@ function toCodepoint(hexcode: string): string {
 }
 
 function messagesFor(locale: AppLocale): MessageSet {
-  return (locale === "ja" ? jaMessages : enMessages) as MessageSet;
+  const data = loadedData();
+  return locale === "ja" ? data.jaMessages : data.enMessages;
 }
 
 function dataFor(locale: AppLocale): RawEmoji[] {
-  return (locale === "ja" ? jaData : enData) as RawEmoji[];
+  const data = loadedData();
+  return locale === "ja" ? data.jaData : data.enData;
 }
-
-const cache = new Map<AppLocale, CatalogEntry[]>();
 
 export function getCategories(locale: AppLocale): CategoryMeta[] {
   const groups = messagesFor(locale).groups;
@@ -91,18 +165,18 @@ export function getCatalog(locale: AppLocale = "en"): CatalogEntry[] {
   if (existing) {
     return existing;
   }
+  const data = loadedData();
   const alternateLocale: AppLocale = locale === "ja" ? "en" : "ja";
   const alternateByHex = new Map(
     dataFor(alternateLocale).map((entry) => [entry.hexcode, entry]),
   );
   const groupMessages = messagesFor(locale).groups;
   const alternateGroupMessages = messagesFor(alternateLocale).groups;
-  const shortcodes = enShortcodes as Record<string, string | string[]>;
   const result = dataFor(locale)
     .filter((entry) => entry.emoji)
     .map((entry): CatalogEntry => {
       const alternate = alternateByHex.get(entry.hexcode);
-      const shortcodeValue = shortcodes[entry.hexcode];
+      const shortcodeValue = data.enShortcodes[entry.hexcode];
       const group = entry.group;
       const groupMessage =
         group === undefined

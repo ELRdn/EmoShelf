@@ -6,12 +6,12 @@
 //
 // 仕様の正本は app/docs/persistence.md。
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
@@ -65,14 +65,16 @@ use windows::Win32::UI::Shell::{SHCreateDataObject, SHParseDisplayName};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
     CallWindowProcW, DefWindowProcW, GetClientRect, GetForegroundWindow, GetWindowThreadProcessId,
-    SetForegroundWindow, SetWindowLongPtrW, GWLP_WNDPROC, HTCLIENT, HTMAXBUTTON, WM_NCHITTEST,
-    WNDPROC,
+    SetForegroundWindow, SetWindowLongPtrW, ShowWindowAsync, GWLP_WNDPROC, HTCLIENT, HTMAXBUTTON,
+    SW_SHOW, WM_NCHITTEST, WNDPROC,
 };
 
 /// 状態ファイル名（appLocalData 直下に保存）。
 const STATE_FILE_NAME: &str = "state.json";
 /// 状態バックアップ名（本体が壊れていた場合の復旧用）。
 const STATE_BACKUP_NAME: &str = "state.json.bak";
+/// ユーザーが明示的に作成する設定だけの復旧スナップショット。
+const SETTINGS_BACKUP_NAME: &str = "settings-backup.json";
 /// 一時ファイルの拡張子（アトミック保存用）。
 const STATE_TMP_EXTENSION: &str = "json.tmp";
 /// ペースト前にフォーカス復帰を待つ時間。
@@ -152,6 +154,52 @@ struct RuntimePreferences {
 }
 
 struct ContextPreferences(Mutex<RuntimePreferences>);
+
+/// 壊れた本体から `.bak` へ切り替えたことをUIへ一度だけ通知する。
+struct RecoveryNotice(Mutex<bool>);
+
+/// Updater公開鍵がビルド時に注入された正式ビルドかどうか。
+struct UpdaterAvailability(bool);
+
+/// グローバルショートカットのイベント受信からshow/focus要求完了までの直近計測。
+struct HotkeyPerformance(Mutex<VecDeque<f64>>);
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PerformanceSnapshot {
+    hotkey_show_samples: usize,
+    hotkey_show_p95_ms: Option<f64>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StateLoadSource {
+    Primary,
+    Backup,
+}
+
+struct LoadedState {
+    content: String,
+    source: StateLoadSource,
+}
+
+fn configured_updater_public_key() -> Option<&'static str> {
+    option_env!("EMOSHELF_UPDATER_PUBLIC_KEY").and_then(|value| {
+        let value = value.trim();
+        (!value.is_empty()).then_some(value)
+    })
+}
+
+fn percentile_95(values: &VecDeque<f64>) -> Option<f64> {
+    if values.is_empty() {
+        return None;
+    }
+    let mut sorted = values.iter().copied().collect::<Vec<_>>();
+    sorted.sort_by(f64::total_cmp);
+    let index = ((sorted.len() as f64 * 0.95).ceil() as usize)
+        .saturating_sub(1)
+        .min(sorted.len() - 1);
+    sorted.get(index).copied()
+}
 
 #[cfg(windows)]
 static ORIGINAL_WNDPROC: AtomicIsize = AtomicIsize::new(0);
@@ -374,7 +422,33 @@ fn toggle_main_window(app: &tauri::AppHandle) {
         let _ = window.hide();
     } else {
         remember_foreground_target(app);
+        // 「表示 p95」はホットキーからネイティブ表示要求が完了するまでを測る。
+        // フォーカス移動は表示後の別処理なので、計測へ混ぜない。
+        let started = Instant::now();
+        #[cfg(windows)]
+        let native_window = window.hwnd().ok();
+        #[cfg(windows)]
+        if let Some(hwnd) = native_window {
+            // ShowWindowAsync avoids blocking the shortcut callback on WebView2's UI thread.
+            let _ = unsafe { ShowWindowAsync(hwnd, SW_SHOW) };
+        } else {
+            let _ = window.show();
+        }
+        #[cfg(not(windows))]
         let _ = window.show();
+        if let Ok(mut samples) = app.state::<HotkeyPerformance>().0.lock() {
+            if samples.len() == 100 {
+                samples.pop_front();
+            }
+            samples.push_back(started.elapsed().as_secs_f64() * 1000.0);
+        }
+        #[cfg(windows)]
+        if let Some(hwnd) = native_window {
+            let _ = unsafe { SetForegroundWindow(hwnd) };
+        } else {
+            let _ = window.set_focus();
+        }
+        #[cfg(not(windows))]
         let _ = window.set_focus();
     }
 }
@@ -396,19 +470,36 @@ fn state_file_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf), String
 
 /// 状態を読み込む。ファイルがなければ `None`。
 /// 本体が壊れていたらバックアップから復旧を試みる（詳細は persistence.md）。
-fn load_state_from_paths(path: &Path, backup: &Path) -> Result<Option<String>, String> {
-    for candidate in [path, backup] {
+fn load_state_with_source(path: &Path, backup: &Path) -> Result<Option<LoadedState>, String> {
+    let mut invalid_or_unreadable = Vec::new();
+    for (candidate, source) in [
+        (path, StateLoadSource::Primary),
+        (backup, StateLoadSource::Backup),
+    ] {
         match std::fs::read_to_string(candidate) {
             Ok(content) => {
                 // JSON として壊れていないものだけ採用する
                 if serde_json::from_str::<serde_json::Value>(&content).is_ok() {
-                    return Ok(Some(content));
+                    return Ok(Some(LoadedState { content, source }));
                 }
+                invalid_or_unreadable.push(candidate.display().to_string());
             }
-            Err(_) => continue,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => invalid_or_unreadable.push(candidate.display().to_string()),
         }
     }
+    if !invalid_or_unreadable.is_empty() {
+        return Err(format!(
+            "STATE_RECOVERY_FAILED: no valid state file was available ({})",
+            invalid_or_unreadable.join(", ")
+        ));
+    }
     Ok(None)
+}
+
+#[cfg(test)]
+fn load_state_from_paths(path: &Path, backup: &Path) -> Result<Option<String>, String> {
+    load_state_with_source(path, backup).map(|state| state.map(|value| value.content))
 }
 
 /// 状態を保存する。既存ファイルはバックアップに退避し、
@@ -428,9 +519,19 @@ fn save_state_to_paths(path: &Path, backup: &Path, content: &str) -> Result<(), 
 
 /// 状態を読み込む（Tauri コマンド）。
 #[tauri::command]
-fn load_state(app: tauri::AppHandle) -> Result<Option<String>, String> {
+fn load_state(
+    app: tauri::AppHandle,
+    recovery_notice: tauri::State<'_, RecoveryNotice>,
+) -> Result<Option<String>, String> {
     let (path, backup) = state_file_paths(&app)?;
-    load_state_from_paths(&path, &backup)
+    let loaded = load_state_with_source(&path, &backup)?;
+    if loaded
+        .as_ref()
+        .is_some_and(|state| state.source == StateLoadSource::Backup)
+    {
+        *recovery_notice.0.lock().map_err(|e| e.to_string())? = true;
+    }
+    Ok(loaded.map(|state| state.content))
 }
 
 /// 状態を保存する（Tauri コマンド）。
@@ -438,6 +539,91 @@ fn load_state(app: tauri::AppHandle) -> Result<Option<String>, String> {
 fn save_state(app: tauri::AppHandle, content: String) -> Result<(), String> {
     let (path, backup) = state_file_paths(&app)?;
     save_state_to_paths(&path, &backup, &content)
+}
+
+fn create_settings_backup_at(path: &Path, state_content: &str) -> Result<(), String> {
+    let state: serde_json::Value =
+        serde_json::from_str(state_content).map_err(|e| e.to_string())?;
+    let object = state
+        .as_object()
+        .ok_or_else(|| "state must be an object".to_string())?;
+    let schema_version = object
+        .get("schemaVersion")
+        .cloned()
+        .ok_or_else(|| "state schemaVersion is missing".to_string())?;
+    let settings = object
+        .get("settings")
+        .cloned()
+        .ok_or_else(|| "state settings are missing".to_string())?;
+    if !settings.is_object() {
+        return Err("state settings must be an object".to_string());
+    }
+    let backup = serde_json::json!({
+        "schemaVersion": schema_version,
+        "settings": settings,
+    });
+    let pretty = serde_json::to_string_pretty(&backup).map_err(|e| e.to_string())?;
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, pretty).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn load_settings_backup_from_path(path: &Path) -> Result<Option<String>, String> {
+    match std::fs::read_to_string(path) {
+        Ok(content) => {
+            let value: serde_json::Value =
+                serde_json::from_str(&content).map_err(|e| e.to_string())?;
+            let object = value
+                .as_object()
+                .ok_or_else(|| "settings backup must be an object".to_string())?;
+            if !object
+                .get("settings")
+                .is_some_and(serde_json::Value::is_object)
+            {
+                return Err("settings backup is missing settings".to_string());
+            }
+            Ok(Some(content))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+#[tauri::command]
+fn create_settings_backup(app: tauri::AppHandle, content: String) -> Result<(), String> {
+    let (state_path, _) = state_file_paths(&app)?;
+    create_settings_backup_at(&state_path.with_file_name(SETTINGS_BACKUP_NAME), &content)
+}
+
+#[tauri::command]
+fn load_settings_backup(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let (state_path, _) = state_file_paths(&app)?;
+    load_settings_backup_from_path(&state_path.with_file_name(SETTINGS_BACKUP_NAME))
+}
+
+#[tauri::command]
+fn take_recovery_notice(recovery_notice: tauri::State<'_, RecoveryNotice>) -> Result<bool, String> {
+    let mut recovered = recovery_notice.0.lock().map_err(|e| e.to_string())?;
+    let value = *recovered;
+    *recovered = false;
+    Ok(value)
+}
+
+#[tauri::command]
+fn updater_available(availability: tauri::State<'_, UpdaterAvailability>) -> bool {
+    availability.0
+}
+
+#[tauri::command]
+fn get_performance_snapshot(
+    performance: tauri::State<'_, HotkeyPerformance>,
+) -> Result<PerformanceSnapshot, String> {
+    let samples = performance.0.lock().map_err(|e| e.to_string())?;
+    Ok(PerformanceSnapshot {
+        hotkey_show_samples: samples.len(),
+        hotkey_show_p95_ms: percentile_95(&samples),
+    })
 }
 
 fn state_schema_and_counts(content: &str) -> Result<(u32, usize, usize), String> {
@@ -1195,6 +1381,11 @@ pub fn run() {
             per_app_boards_enabled: false,
             active_monitor_positioning: true,
         })))
+        .manage(RecoveryNotice(Mutex::new(false)))
+        .manage(UpdaterAvailability(
+            configured_updater_public_key().is_some(),
+        ))
+        .manage(HotkeyPerformance(Mutex::new(VecDeque::with_capacity(100))))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -1237,6 +1428,13 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            if let Some(public_key) = configured_updater_public_key() {
+                app.handle().plugin(
+                    tauri_plugin_updater::Builder::new()
+                        .pubkey(public_key)
+                        .build(),
+                )?;
+            }
             let show_item = MenuItem::with_id(app, "show", "Open EmoShelf", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
@@ -1293,6 +1491,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             load_state,
             save_state,
+            create_settings_backup,
+            load_settings_backup,
+            take_recovery_notice,
+            updater_available,
+            get_performance_snapshot,
             set_global_shortcut,
             paste_payload,
             copy_image_asset,
@@ -1449,6 +1652,49 @@ mod tests {
             .expect("should recover from backup");
         let value: serde_json::Value = serde_json::from_str(&loaded).expect("recovered json");
         assert_eq!(value["schemaVersion"], 1);
+    }
+
+    #[test]
+    fn refuses_to_treat_corrupt_state_without_backup_as_empty() {
+        let dir = TempDir::new("corrupt-without-backup");
+        let path = dir.path().join(STATE_FILE_NAME);
+        let backup = dir.path().join(STATE_BACKUP_NAME);
+        std::fs::write(&path, "not json at all").expect("corrupt main");
+
+        let error = load_state_from_paths(&path, &backup).expect_err("must fail closed");
+        assert!(error.starts_with("STATE_RECOVERY_FAILED:"));
+    }
+
+    #[test]
+    fn settings_backup_roundtrips_only_schema_and_settings() {
+        let dir = TempDir::new("settings-backup");
+        let path = dir.path().join(SETTINGS_BACKUP_NAME);
+        let state = r#"{"schemaVersion":2,"boards":[],"settings":{"theme":"dark"},"secretExtra":"ignored"}"#;
+        create_settings_backup_at(&path, state).expect("create settings backup");
+        let loaded = load_settings_backup_from_path(&path)
+            .expect("load settings backup")
+            .expect("backup exists");
+        let value: serde_json::Value = serde_json::from_str(&loaded).expect("valid json");
+        assert_eq!(value["schemaVersion"], 2);
+        assert_eq!(value["settings"]["theme"], "dark");
+        assert!(value.get("boards").is_none());
+        assert!(value.get("secretExtra").is_none());
+    }
+
+    #[test]
+    fn settings_backup_rejects_missing_settings() {
+        let dir = TempDir::new("settings-backup-invalid");
+        let path = dir.path().join(SETTINGS_BACKUP_NAME);
+        let result = create_settings_backup_at(&path, r#"{"schemaVersion":2}"#);
+        assert!(result.is_err());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn performance_p95_uses_the_nearest_rank() {
+        let values = VecDeque::from([2.0, 1.0, 9.0, 3.0, 5.0]);
+        assert_eq!(percentile_95(&values), Some(9.0));
+        assert_eq!(percentile_95(&VecDeque::new()), None);
     }
 
     #[test]

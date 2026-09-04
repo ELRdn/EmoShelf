@@ -10,7 +10,34 @@ export default defineConfig(async () => ({
   plugins: [
     react(),
     viteStaticCopy({
-      targets: [{ src: "node_modules/@twemoji/svg/*.svg", dest: "twemoji" }],
+      targets: [
+        { src: "node_modules/@twemoji/svg/*.svg", dest: "twemoji" },
+        {
+          src: "node_modules/emojibase-data/en/data.json",
+          dest: "emoji-data",
+          rename: "en-data.json",
+        },
+        {
+          src: "node_modules/emojibase-data/ja/data.json",
+          dest: "emoji-data",
+          rename: "ja-data.json",
+        },
+        {
+          src: "node_modules/emojibase-data/en/messages.json",
+          dest: "emoji-data",
+          rename: "en-messages.json",
+        },
+        {
+          src: "node_modules/emojibase-data/ja/messages.json",
+          dest: "emoji-data",
+          rename: "ja-messages.json",
+        },
+        {
+          src: "node_modules/emojibase-data/en/shortcodes/cldr.json",
+          dest: "emoji-data",
+          rename: "en-shortcodes.json",
+        },
+      ],
     }),
   ],
 
@@ -34,5 +61,8 @@ export default defineConfig(async () => ({
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],
     },
+  },
+  build: {
+    chunkSizeWarningLimit: 500,
   },
 }));

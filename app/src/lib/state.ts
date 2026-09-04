@@ -222,6 +222,17 @@ const settingsSchema = z
   })
   .passthrough();
 
+const settingsBackupSchema = z
+  .object({
+    schemaVersion: z.literal(STATE_SCHEMA_VERSION),
+    settings: settingsSchema,
+  })
+  .passthrough();
+
+export function parseSettingsBackup(raw: unknown): Settings {
+  return settingsBackupSchema.parse(raw).settings as Settings;
+}
+
 const stateV2Schema = z
   .object({
     schemaVersion: z.literal(STATE_SCHEMA_VERSION),

@@ -62,6 +62,40 @@ describe("EmoShelf UI", () => {
     ).toEqual([]);
   });
 
+  it("traps modal focus, restores it on Escape, and passes axe", async () => {
+    const user = userEvent.setup();
+    const initial = createInitialState();
+    useShelfStore.setState({
+      ...initial,
+      loaded: true,
+      onboardingCompleted: true,
+      boards: [{ id: "shelf", name: "Shelf", order: 0, items: [] }],
+      settings: { ...initial.settings, locale: "ja" },
+    });
+    const { container } = render(<App />);
+    const settingsButton = screen.getByRole("button", { name: "設定" });
+
+    await user.click(settingsButton);
+    const dialog = screen.getByRole("dialog", { name: "設定" });
+    expect(dialog).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Close \/ 閉じる: 設定/ }),
+    ).toHaveFocus();
+    const result = await axe.run(container, {
+      runOnly: ["wcag2a", "wcag2aa"],
+    });
+    expect(
+      result.violations.filter(
+        (violation) =>
+          violation.impact === "serious" || violation.impact === "critical",
+      ),
+    ).toEqual([]);
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "設定" })).toBeNull();
+    expect(settingsButton).toHaveFocus();
+  });
+
   it("shows the personal Shelf after onboarding", () => {
     const initial = createInitialState();
     useShelfStore.setState({

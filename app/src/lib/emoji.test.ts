@@ -25,4 +25,14 @@ describe("emoji catalog", () => {
     expect(entry?.emoji).toBe("😂");
     expect(entry?.hexcode).toBe("1f602");
   });
+
+  it("keeps 1949-item search comfortably below the 100 ms interaction budget", () => {
+    const durations = Array.from({ length: 40 }, (_, index) => {
+      const started = performance.now();
+      searchCatalog(index % 2 === 0 ? "face" : "顔", 1949, "ja");
+      return performance.now() - started;
+    }).sort((left, right) => left - right);
+    const p95 = durations[Math.ceil(durations.length * 0.95) - 1] ?? Infinity;
+    expect(p95).toBeLessThan(100);
+  });
 });

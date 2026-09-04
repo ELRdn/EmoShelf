@@ -1,6 +1,6 @@
 # EmoShelf 引き継ぎ書
 
-> 最終更新: 2026-09-05（基礎構築: DSH / Scarlet 🦊、Phase 0〜v0.4: Cyan/Codex）
+> 最終更新: 2026-09-05（基礎構築: DSH / Scarlet 🦊、Phase 0〜v0.5: Cyan/Codex）
 > このファイルは他エージェントへの引き継ぎ用。作業開始前にここから読むこと。
 
 ## 0. 読み順（5分コース）
@@ -53,6 +53,14 @@
   - Board参照中アセットの削除防止、Recentのみの参照を安全に掃除する削除、`.emoshelf` asset統合
   - Ed25519署名・hash・互換性・ZIP構造・静的SVGを検証するRenderer Pack管理と帰属UI
   - 本番信頼鍵が無いビルドはPackを一切受理しないfail-closed設計
+- **v0.5 Polish & Accessibility**:
+  - modal focus trap／復帰、skip link、セマンティック要素、axe、forced-colors、
+    prefers-contrast、Reduced Motionを含むアクセシビリティ基盤
+  - `state.json`と`.bak`が両方壊れた場合の読み取り専用停止、復旧通知、明示的な設定バックアップ
+  - 署名鍵が無い開発ビルドでは無効になるTauri Updater。確認とダウンロード／再起動同意を分離
+  - 絵文字データを静的JSONへ分離し、全JavaScript chunkを500KiB以下にするbuild gate
+  - 起動→操作可能、検索p95、ホットキー表示要求p95、JavaScript heapのローカル診断
+  - Windows表示は`ShowWindowAsync`へ切り替え、WebView2 UI thread待ちをショートカット経路から除外
 - **v0.1 データ層**:
   - Rust: `load_state` / `save_state`（アトミック保存・`.bak` 復旧）/
     `set_global_shortcut` / `paste_payload`（クリップボード→非表示→Ctrl+V）
@@ -61,19 +69,22 @@
     emojibase全1949件＋日英検索、ペーストAPI＋コピーフォールバック
   - schema v2: 判別可能ShelfItem、型付きRecent、v1移行、未知フィールド保持、未来schema上書き防止
 - **Rust 基盤検証**: lockfile 固定のコンパイル、Clippy（警告をエラー扱い）、
-  永続化・ショートカット・`.emoshelf`・カスタム画像・Renderer Pack等の単体テスト60件
+  永続化・ショートカット・`.emoshelf`・カスタム画像・Renderer Pack等の単体テスト64件
 - **Windows 実機検証**: release ビルドの起動、`Alt+E` による表示／非表示、
   二重起動時の既存ウィンドウ前面化を確認。NSIS `.exe` と MSI `.msi` も生成済み
-- **フロント検証**: TypeScript、Biome、Vitest/React Testing Library/axe（42件）、production build
+- **フロント検証**: TypeScript、Biome、Vitest/React Testing Library/axe（48件）、production build
 - **v0.4実機確認**: PNG取込・表示・Board追加・削除、128×128画像clipboard、画像Paste、
   `Alt+E`、単一起動を確認。ExplorerへのOLE実ドロップはComputer Useのウィンドウ境界制約で未受入
-- `ROADMAP.md` のPhase 0〜v0.4チェックボックスは受け入れ結果へ同期済み
+- **v0.5実機計測**: 起動→操作可能77.5ms、JS heap 6.4MiB、非同期ホットキー表示要求0.1ms。
+  再起動後のホットキーsampleは1件のため、10件以上のp95証跡はv1.0手動ゲートへ継続
+- `ROADMAP.md` のPhase 0〜v0.5チェックボックスは受け入れ結果へ同期済み
 
 ### 次の作業
 
 - v0.4残件: Explorer／画像対応アプリへのOLE実ドロップを手動またはウィンドウ間操作可能な環境で確認
-- v0.5: Accessibility、性能、復旧、設定バックアップ、署名必須Updater、120/144Hz以上の実機確認
-- Viteの500kB超チャンク警告は未解消。v1.0検証ゲートまでにデータ・locale・画面単位で分割する
+- v0.5残件: Narrator、大文字、125%／150%／200%、高DPI、120/144Hz以上、ホットキー10 sample p95
+- v1.0: 正式アイコン、公開文書、CI/E2E/配布監査、x64／ARM64署名済みリリース
+- SignPath Foundationの本人確認・MFA・申請承認とprivate→public変更はユーザー操作を伴う外部ゲート
 
 ## 3. 主要ファイル
 
@@ -90,6 +101,7 @@
     ├── .npmrc                          # esbuild の postinstall スキップ（§5 参照）
     ├── README.md                       # 開発者向け説明
     ├── docs/persistence.md             # state.json / .emoshelf仕様（正本）
+    ├── docs/updater.md                 # 明示同意・署名鍵・公開条件
     ├── docs/renderer-packs.md          # 署名付きRenderer Pack仕様
     ├── src/
     │   ├── App.tsx / App.css            # Concept 2.5 Shelf UI
@@ -98,7 +110,9 @@
     │   └── lib/
     │       ├── state.ts                # 型の正本（STATE_SCHEMA_VERSION = 2）
     │       ├── store.ts                # zustand ストア
-    │       ├── emoji.ts                # カタログ・検索
+    │       ├── emoji.ts                # 分割カタログ・検索
+    │       ├── performance.ts          # 起動・検索・メモリ計測
+    │       ├── updates.ts              # 更新確認・明示同意後の適用
     │       ├── paste.ts                # ペースト実行
     │       ├── transfer.ts             # .emoshelfとID再割当Merge
     │       └── i18n.ts                 # 日本語/英語UI文言
@@ -135,7 +149,7 @@ cargo check --locked
 
 1. **Rust はローカル検証済み**: `cargo fmt --check`、警告をエラー扱いした Clippy、
    単体テスト、`cargo check --locked` を各PRの完了条件とする。
-   永続化・ショートカット・交換形式・前面アプリ・画像・Pack境界に Rust 単体テスト 60 件がある。
+   永続化・ショートカット・交換形式・前面アプリ・画像・Pack境界に Rust 単体テスト 64 件がある。
 2. **`Cargo.lock` は同期・コミット必須**: `Cargo.toml` の全直接依存を含む状態で管理し、
    CI でも `--locked` を指定して意図しない依存更新を拒否する。
 3. **esbuild の postinstall を無効化している**（`app/.npmrc` の `never-built-dependencies`）:
@@ -149,14 +163,18 @@ cargo check --locked
 6. **npm/pnpm のキャッシュ・ストア**: サンドボックスでは `AppData\Local` 直下への
    書き込みが EPERM になる。回避には `$env:TEMP` 配下へのリダイレクト
    （`XDG_CACHE_HOME`、`--store-dir`）を使うこと。通常環境では不要。
-7. **Vite のチャンクサイズ警告**: 日英emojibase全件を含むため500kB超の警告が出る。
-   1949件のDOM描画は仮想化済みだが、配信チャンクはv1.0までに分割する。
+7. **JavaScript bundle gate**: 日英emojibaseは静的JSONへ分離済み。`pnpm build`は
+   500KiBを超えるJavaScript chunkがあれば失敗する。現状の最大chunkは約457.28kB。
 8. **外部Renderer**: Fluent/Noto/OpenMojiは未同梱。v0.4で署名・ハッシュ検証付き
    Renderer Pack管理を実装済みだが、`EMOSHELF_RENDERER_KEY_ID`と
    `EMOSHELF_RENDERER_PUBLIC_KEY_BASE64`をビルド時に設定しない限りfail-closedで無効になる。
    秘密鍵はリポジトリへ置かない。Pack詳細は`app/docs/renderer-packs.md`を参照。
 9. **v0.4 OLE実ドロップ**: 実装・Windowsコンパイル・キャンセル経路までは確認済み。
    現行Computer Useは対象ウィンドウ外座標へドラッグできないため、Explorer等への成功証跡だけ残件。
+10. **Updaterは開発ビルドで無効**: `EMOSHELF_UPDATER_PUBLIC_KEY`をビルド時に設定した場合だけ
+    pluginを登録する。秘密鍵はリポジトリへ置かず、Renderer Pack鍵とも分離する。
+11. **v0.5手動アクセシビリティ残件**: axeとキーボード自動テストは通過済みだが、Narrator、
+    125%／150%／200%、大文字、120/144Hz以上は端末設定の復元証跡を伴うため未受入。
 
 ## 6. 決定事項（覆す場合は記録を残すこと）
 
@@ -171,13 +189,13 @@ cargo check --locked
 | ショートカット登録 | Rust が所有、フロントは設定値の通知のみ | 二重登録・競合の単一管理点化 |
 | ペースト方式 | クリップボード＋enigo の Ctrl+V | 標準的構成。失敗時は Copy only に自動フォールバック |
 
-## 7. 次の作業の推奨順序（v0.5）
+## 7. 次の作業の推奨順序（v1.0）
 
-1. Accessibilityとキーボード／focus-visible／contrastの監査
-2. 画面・locale・emoji dataの分割と性能計測
-3. crash recoveryと設定バックアップ
-4. 署名検証必須の静かなUpdaterフロー
-5. DPI・複数monitor・高リフレッシュ環境の実機確認
+1. 参照画から正式アイコンmasterを生成し、小サイズ視認性とTauri icon一式を確認
+2. README／Privacy／Attributions／Contributing／Security／Issue導線／Release Notesを完成
+3. x64／ARM64、WebDriver、インストール／更新／アンインストール、署名検証CIを構築
+4. v0.4 OLE実ドロップとv0.5手動アクセシビリティ／DPI／高リフレッシュ残件を実機で受入
+5. 履歴・秘密情報・生成物・第三者ライセンスを監査し、外部ゲート完了後に署名済みv1.0.0を公開
 
 ## 8. 規約
 

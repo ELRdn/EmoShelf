@@ -1,12 +1,12 @@
 {
   "name": "emoshelf",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && node tools/check-bundle-size.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",
@@ -26,6 +26,7 @@
     "@tauri-apps/plugin-dialog": "^2.7.3",
     "@tauri-apps/plugin-global-shortcut": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-updater": "^2",
     "@twemoji/svg": "^15.0.0",
     "emojibase": "^17.0.0",
     "emojibase-data": "^17.0.0",
