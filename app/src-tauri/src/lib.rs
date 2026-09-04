@@ -15,22 +15,36 @@ use std::time::Duration;
 #[cfg(windows)]
 use std::sync::atomic::{AtomicIsize, Ordering};
 
-use tauri::Manager;
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager,
+};
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 #[cfg(windows)]
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+use windows::core::PWSTR;
 #[cfg(windows)]
-use windows::Win32::Graphics::Gdi::ScreenToClient;
+use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+#[cfg(windows)]
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MonitorFromWindow, ScreenToClient, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST,
+};
+#[cfg(windows)]
+use windows::Win32::System::Threading::{
+    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+};
 #[cfg(windows)]
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallWindowProcW, DefWindowProcW, GetClientRect, GetForegroundWindow, SetForegroundWindow,
-    SetWindowLongPtrW, GWLP_WNDPROC, HTCLIENT, HTMAXBUTTON, WM_NCHITTEST, WNDPROC,
+    CallWindowProcW, DefWindowProcW, GetClientRect, GetForegroundWindow, GetWindowThreadProcessId,
+    SetForegroundWindow, SetWindowLongPtrW, GWLP_WNDPROC, HTCLIENT, HTMAXBUTTON, WM_NCHITTEST,
+    WNDPROC,
 };
 
 /// 状態ファイル名（appLocalData 直下に保存）。
@@ -43,6 +57,8 @@ const STATE_TMP_EXTENSION: &str = "json.tmp";
 const PASTE_FOCUS_WAIT: Duration = Duration::from_millis(120);
 /// 既定のグローバルショートカット（設定読み込み前のフォールバック）。
 const DEFAULT_SHORTCUT: &str = "alt+e";
+/// Windowsサインイン時はUIを出さずTrayに待機する。
+const AUTOSTART_ARG: &str = "--autostart";
 /// `.emoshelf` container format and supported application state versions.
 const EMOSHELF_FORMAT_VERSION: u32 = 1;
 const SUPPORTED_STATE_SCHEMA: u32 = 2;
@@ -75,6 +91,24 @@ struct ActiveShortcut(Mutex<Option<Shortcut>>);
 /// ショートカットを押す直前に前面だったウィンドウ。フルパスやタイトルは保持しない。
 struct PasteTarget(Mutex<Option<isize>>);
 
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ForegroundContext {
+    executable: String,
+    monitor: String,
+}
+
+/// アプリ別Board用の直近コンテキスト。フルパスとウィンドウタイトルは保持しない。
+struct CapturedContext(Mutex<Option<ForegroundContext>>);
+
+#[derive(Default)]
+struct RuntimePreferences {
+    per_app_boards_enabled: bool,
+    active_monitor_positioning: bool,
+}
+
+struct ContextPreferences(Mutex<RuntimePreferences>);
+
 #[cfg(windows)]
 static ORIGINAL_WNDPROC: AtomicIsize = AtomicIsize::new(0);
 
@@ -86,6 +120,100 @@ fn hwnd_to_isize(hwnd: HWND) -> isize {
 #[cfg(windows)]
 fn isize_to_hwnd(value: isize) -> HWND {
     HWND(value as *mut core::ffi::c_void)
+}
+
+fn executable_basename(path: &str) -> Option<String> {
+    let name = path
+        .rsplit(['/', '\\'])
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    Some(name.to_lowercase())
+}
+
+#[cfg(windows)]
+fn monitor_snapshot(hwnd: HWND) -> Option<(String, RECT)> {
+    // SAFETY: Windows validates the HWND; nearest-monitor fallback always returns a monitor.
+    let monitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
+    if monitor.is_invalid() {
+        return None;
+    }
+    let mut info = MONITORINFOEXW::default();
+    info.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
+    // SAFETY: info has the documented size and remains valid for the duration of the call.
+    if !unsafe { GetMonitorInfoW(monitor, &raw mut info.monitorInfo) }.as_bool() {
+        return None;
+    }
+    let end = info
+        .szDevice
+        .iter()
+        .position(|unit| *unit == 0)
+        .unwrap_or(info.szDevice.len());
+    let name = String::from_utf16_lossy(&info.szDevice[..end]);
+    Some((name, info.monitorInfo.rcWork))
+}
+
+#[cfg(windows)]
+fn foreground_context(hwnd: HWND) -> Option<ForegroundContext> {
+    let mut process_id = 0;
+    // SAFETY: Windows only writes the process id associated with this HWND.
+    if unsafe { GetWindowThreadProcessId(hwnd, Some(&raw mut process_id)) } == 0 || process_id == 0
+    {
+        return None;
+    }
+    // SAFETY: The handle requests only limited query access and is closed before returning.
+    let process =
+        unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id) }.ok()?;
+    let mut buffer = vec![0_u16; 32_768];
+    let mut size = buffer.len() as u32;
+    // SAFETY: buffer is writable for `size` UTF-16 units and process is a valid open handle.
+    let query_result = unsafe {
+        QueryFullProcessImageNameW(
+            process,
+            PROCESS_NAME_WIN32,
+            PWSTR(buffer.as_mut_ptr()),
+            &mut size,
+        )
+    };
+    // SAFETY: process was returned by OpenProcess and is no longer used after this point.
+    let _ = unsafe { CloseHandle(process) };
+    query_result.ok()?;
+    let full_path = String::from_utf16_lossy(&buffer[..size as usize]);
+    let executable = executable_basename(&full_path)?;
+    let (monitor, _) = monitor_snapshot(hwnd)?;
+    Some(ForegroundContext {
+        executable,
+        monitor,
+    })
+}
+
+#[cfg(windows)]
+fn position_main_window_for_target(app: &tauri::AppHandle, target: HWND) {
+    let active_monitor_positioning = app
+        .state::<ContextPreferences>()
+        .0
+        .lock()
+        .map(|guard| guard.active_monitor_positioning)
+        .unwrap_or(true);
+    if !active_monitor_positioning {
+        return;
+    }
+    let Some((_, work_area)) = monitor_snapshot(target) else {
+        return;
+    };
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let Ok(size) = window.outer_size() else {
+        return;
+    };
+    let width = i32::try_from(size.width).unwrap_or(i32::MAX);
+    let height = i32::try_from(size.height).unwrap_or(i32::MAX);
+    let work_width = work_area.right.saturating_sub(work_area.left);
+    let work_height = work_area.bottom.saturating_sub(work_area.top);
+    let x = work_area.left + (work_width.saturating_sub(width)) / 2;
+    let y = work_area.top + (work_height.saturating_sub(height)) / 3;
+    let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
 }
 
 #[cfg(windows)]
@@ -103,6 +231,21 @@ fn remember_foreground_target(app: &tauri::AppHandle) {
     }
     if let Ok(mut guard) = app.state::<PasteTarget>().0.lock() {
         *guard = Some(hwnd_to_isize(foreground));
+    }
+    position_main_window_for_target(app, foreground);
+    let per_app_enabled = app
+        .state::<ContextPreferences>()
+        .0
+        .lock()
+        .map(|guard| guard.per_app_boards_enabled)
+        .unwrap_or(false);
+    let context = if per_app_enabled {
+        foreground_context(foreground).filter(|value| value.executable != "emoshelf.exe")
+    } else {
+        None
+    };
+    if let Ok(mut guard) = app.state::<CapturedContext>().0.lock() {
+        *guard = context;
     }
 }
 
@@ -187,6 +330,14 @@ fn toggle_main_window(app: &tauri::AppHandle) {
         let _ = window.hide();
     } else {
         remember_foreground_target(app);
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+fn reveal_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
     }
@@ -472,6 +623,59 @@ fn preview_emoshelf(path: String) -> Result<EmoShelfImportPreview, String> {
     preview_emoshelf_from_path(Path::new(&path))
 }
 
+#[tauri::command]
+fn get_foreground_context(app: tauri::AppHandle) -> Result<Option<ForegroundContext>, String> {
+    app.state::<CapturedContext>()
+        .0
+        .lock()
+        .map(|guard| guard.clone())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn set_context_preferences(
+    app: tauri::AppHandle,
+    per_app_boards_enabled: bool,
+    popup_position_behavior: String,
+) -> Result<(), String> {
+    let active_monitor_positioning = match popup_position_behavior.as_str() {
+        "active-monitor" => true,
+        "remember-last" => false,
+        _ => return Err("unsupported popup position behavior".to_string()),
+    };
+    let preferences_state = app.state::<ContextPreferences>();
+    let mut preferences = preferences_state
+        .0
+        .lock()
+        .map_err(|error| error.to_string())?;
+    preferences.per_app_boards_enabled = per_app_boards_enabled;
+    preferences.active_monitor_positioning = active_monitor_positioning;
+    drop(preferences);
+    if !per_app_boards_enabled {
+        let context_state = app.state::<CapturedContext>();
+        let mut context = context_state.0.lock().map_err(|error| error.to_string())?;
+        *context = None;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_autostart(app: tauri::AppHandle) -> Result<bool, String> {
+    app.autolaunch()
+        .is_enabled()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    if enabled {
+        app.autolaunch().enable()
+    } else {
+        app.autolaunch().disable()
+    }
+    .map_err(|error| error.to_string())
+}
+
 /// 文字列をショートカットへ変換する（"Alt+E" のような表示形式も受理）。
 fn parse_shortcut(input: &str) -> Result<Shortcut, String> {
     let normalized = input.trim().to_lowercase();
@@ -569,9 +773,18 @@ pub fn run() {
     tauri::Builder::default()
         .manage(ActiveShortcut(Mutex::new(None)))
         .manage(PasteTarget(Mutex::new(None)))
+        .manage(CapturedContext(Mutex::new(None)))
+        .manage(ContextPreferences(Mutex::new(RuntimePreferences {
+            per_app_boards_enabled: false,
+            active_monitor_positioning: true,
+        })))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            Some(vec![AUTOSTART_ARG]),
+        ))
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(
@@ -584,10 +797,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // 二重起動で呼び出した前面アプリも、貼り付け先として保持する。
             remember_foreground_target(app);
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            reveal_main_window(app);
         }))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -603,7 +813,50 @@ pub fn run() {
                 eprintln!("EmoShelf: native Snap Layout integration unavailable: {error}");
             }
         })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .setup(|app| {
+            let show_item = MenuItem::with_id(app, "show", "Open EmoShelf", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+            let mut tray = TrayIconBuilder::with_id("main")
+                .tooltip("EmoShelf — Alt+E")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        remember_foreground_target(app);
+                        reveal_main_window(app);
+                    }
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        remember_foreground_target(tray.app_handle());
+                        reveal_main_window(tray.app_handle());
+                    }
+                });
+            if let Some(icon) = app.default_window_icon() {
+                tray = tray.icon(icon.clone());
+            }
+            tray.build(app)?;
+
+            if std::env::args().any(|argument| argument == AUTOSTART_ARG) {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.hide();
+                }
+            }
+
             // 設定読み込み前のフォールバックとして既定ショートカットを登録する。
             // 登録失敗でも起動は継続し、ActiveShortcut は成功時のみ更新する。
             let shortcut = match parse_shortcut(DEFAULT_SHORTCUT) {
@@ -626,7 +879,11 @@ pub fn run() {
             set_global_shortcut,
             paste_payload,
             export_emoshelf,
-            preview_emoshelf
+            preview_emoshelf,
+            get_foreground_context,
+            set_context_preferences,
+            get_autostart,
+            set_autostart
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -765,6 +1022,19 @@ mod tests {
     fn parse_rejects_empty_shortcut() {
         assert!(parse_shortcut("").is_err());
         assert!(parse_shortcut("   ").is_err());
+    }
+
+    #[test]
+    fn executable_context_keeps_only_a_lowercase_basename() {
+        assert_eq!(
+            executable_basename(r"C:\\Program Files\\Discord\\Discord.exe"),
+            Some("discord.exe".to_string())
+        );
+        assert_eq!(
+            executable_basename("/usr/bin/code"),
+            Some("code".to_string())
+        );
+        assert_eq!(executable_basename(""), None);
     }
 
     #[test]

@@ -67,6 +67,42 @@ function itemKey(item: ShelfItem): string {
     : `${item.type}:${item.payload}`;
 }
 
+export function getFrequentItems(boards: Board[], limit = 30): ShelfItem[] {
+  const byPayload = new Map<string, ShelfItem>();
+  for (const item of boards.flatMap((board) => board.items)) {
+    if (item.usage.useCount <= 0) {
+      continue;
+    }
+    const key = itemKey(item);
+    const existing = byPayload.get(key);
+    if (!existing) {
+      byPayload.set(key, item);
+      continue;
+    }
+    const lastUsedAt = [existing.usage.lastUsedAt, item.usage.lastUsedAt]
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .pop();
+    byPayload.set(key, {
+      ...existing,
+      usage: {
+        ...existing.usage,
+        useCount: existing.usage.useCount + item.usage.useCount,
+        ...(lastUsedAt ? { lastUsedAt } : {}),
+      },
+    });
+  }
+  return [...byPayload.values()]
+    .sort(
+      (left, right) =>
+        right.usage.useCount - left.usage.useCount ||
+        (right.usage.lastUsedAt ?? "").localeCompare(
+          left.usage.lastUsedAt ?? "",
+        ),
+    )
+    .slice(0, limit);
+}
+
 function normalizeBoards(boards: Board[]): Board[] {
   return boards.map((board, order) => ({ ...board, order }));
 }
@@ -113,12 +149,15 @@ export interface ShelfStore extends AppState {
     name?: string,
   ) => boolean;
   applyImportedState: (state: AppState, mode: ImportMode) => Promise<void>;
+  setAppBoardMapping: (application: string, boardId?: string) => boolean;
+  setAutostart: (enabled: boolean) => Promise<void>;
   recordUse: (
     payload: string,
     type?: "unicode" | "sequence" | "symbol",
   ) => void;
   recordItemUse: (item: ShelfItem) => void;
   clearRecents: () => void;
+  resetUsageStatistics: () => void;
   updateSettings: (partial: Partial<Settings>) => void;
   setGlobalShortcut: (shortcut: string) => Promise<void>;
   finishOnboarding: (items: NewShelfItem[]) => string;
@@ -474,7 +513,35 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
     }
   },
 
+  setAppBoardMapping: (application, boardId) => {
+    const normalized = application.trim().toLocaleLowerCase();
+    if (!normalized || normalized.includes("/") || normalized.includes("\\")) {
+      return false;
+    }
+    if (boardId && !get().boards.some((board) => board.id === boardId)) {
+      return false;
+    }
+    const appBoardMappings = { ...get().appBoardMappings };
+    if (boardId) {
+      appBoardMappings[normalized] = boardId;
+    } else {
+      delete appBoardMappings[normalized];
+    }
+    withSave(set, get, { appBoardMappings });
+    return true;
+  },
+
+  setAutostart: async (enabled) => {
+    await invoke("set_autostart", { enabled });
+    withSave(set, get, {
+      settings: { ...get().settings, autostart: enabled },
+    });
+  },
+
   recordUse: (payload, type = "unicode") => {
+    if (!get().settings.usageTrackingEnabled) {
+      return;
+    }
     const item = get()
       .boards.flatMap((board) => board.items)
       .find(
@@ -501,6 +568,9 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
   },
 
   recordItemUse: (item) => {
+    if (!get().settings.usageTrackingEnabled) {
+      return;
+    }
     const now = new Date().toISOString();
     const key = itemKey(item);
     const recentEntry =
@@ -510,15 +580,13 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
     const boards = get().boards.map((board) => ({
       ...board,
       items: board.items.map((entry) =>
-        itemKey(entry) === key
+        entry.id === item.id
           ? {
               ...entry,
               usage: {
                 ...entry.usage,
                 lastUsedAt: now,
-                useCount: get().settings.usageTrackingEnabled
-                  ? entry.usage.useCount + 1
-                  : entry.usage.useCount,
+                useCount: entry.usage.useCount + 1,
               },
             }
           : entry,
@@ -534,6 +602,22 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
   },
 
   clearRecents: () => withSave(set, get, { recent: [] }),
+
+  resetUsageStatistics: () => {
+    withSave(set, get, {
+      recent: [],
+      boards: get().boards.map((board) => ({
+        ...board,
+        items: board.items.map((item) => ({
+          ...item,
+          usage: {
+            addedAt: item.usage.addedAt,
+            useCount: 0,
+          },
+        })),
+      })),
+    });
+  },
 
   updateSettings: (partial) => {
     const { globalShortcut, ...immediate } = partial;

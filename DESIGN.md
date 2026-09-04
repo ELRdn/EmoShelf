@@ -1265,7 +1265,9 @@ Recommended sections:
 - Default Board
 - Recents behavior
 - Reset onboarding
-- Usage stats later
+- Local usage tracking / reset
+- Optional Shelf Glow
+- Optional app → Board mapping
 
 ## Data
 
@@ -1485,9 +1487,7 @@ This keeps screenshots visually calm.
 
 ---
 
-# 43. Future: Compose Tray
-
-Not required for v0.1.
+# 43. Compose Tray (v0.2)
 
 ```text
 Compose
@@ -1503,7 +1503,7 @@ Yellow may mark saved sequences / favorites.
 
 ---
 
-# 44. Future: Shelf Glow
+# 44. Shelf Glow (v0.3)
 
 Frequently used emoji cells may gain extremely subtle visual intensity.
 
@@ -1515,13 +1515,13 @@ Requirements:
 - must not reduce accessibility
 - should not become a heatmap rainbow
 
-Use neutral brightness changes first.
-
-Do not automatically use Yellow for usage frequency.
+Use neutral brightness changes first. When the user explicitly enables Shelf Glow,
+Warm Amber may add a restrained edge/glow at three intensity levels. Do not show
+counts directly on every cell; the selected-item detail may expose its local count.
 
 ---
 
-# 45. Future: Per-App Boards
+# 45. Per-App Boards (v0.3)
 
 The active Board can optionally depend on the foreground application.
 
@@ -1538,6 +1538,9 @@ The transition should feel predictable.
 When a Board changes automatically, a subtle temporary label is enough.
 
 Avoid flashy animation.
+
+Privacy boundary: keep only a lowercase executable basename in mappings. Full paths,
+window titles, and process IDs must never enter persisted state; monitor IDs are runtime-only.
 
 ---
 

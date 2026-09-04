@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
@@ -19,7 +20,7 @@ import {
 import { resolveLocale, translate } from "./lib/i18n";
 import { copyPayload, pastePayload } from "./lib/paste";
 import type { ShelfItem } from "./lib/state";
-import { snapshotState, useShelfStore } from "./lib/store";
+import { getFrequentItems, snapshotState, useShelfStore } from "./lib/store";
 
 type CategoryId = number | "all" | "recent";
 type Modal =
@@ -41,7 +42,13 @@ interface Selection {
   hexcode?: string;
   itemId?: string;
   itemType?: ShelfItem["type"];
+  useCount?: number;
   source: "shelf" | "catalog";
+}
+
+interface ForegroundContext {
+  executable: string;
+  monitor: string;
 }
 
 interface ToastState {
@@ -77,6 +84,7 @@ function selectionFromItem(item: ShelfItem, locale: AppLocale): Selection {
     hexcode: catalog?.hexcode,
     itemId: item.id,
     itemType: item.type,
+    useCount: item.usage.useCount,
     source: "shelf",
   };
 }
@@ -99,7 +107,7 @@ function TitleBar({
         </span>
         <strong data-tauri-drag-region>EmoShelf</strong>
         <span className="version-pill" data-tauri-drag-region>
-          v0.2
+          v0.3
         </span>
       </div>
       <div className="window-controls">
@@ -196,6 +204,7 @@ function App() {
   const boards = useShelfStore((state) => state.boards);
   const recent = useShelfStore((state) => state.recent);
   const settings = useShelfStore((state) => state.settings);
+  const appBoardMappings = useShelfStore((state) => state.appBoardMappings);
   const onboardingCompleted = useShelfStore(
     (state) => state.onboardingCompleted,
   );
@@ -205,6 +214,7 @@ function App() {
   const locale = resolveLocale(settings.locale);
   const [activeBoardId, setActiveBoardId] = useState<string>();
   const [catalogMode, setCatalogMode] = useState(false);
+  const [frequentMode, setFrequentMode] = useState(false);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<CategoryId>("all");
   const [selection, setSelection] = useState<Selection>();
@@ -220,11 +230,18 @@ function App() {
   const [sequenceName, setSequenceName] = useState("");
   const [sequenceDraft, setSequenceDraft] = useState("");
   const [toast, setToast] = useState<ToastState>();
+  const [foregroundContext, setForegroundContext] =
+    useState<ForegroundContext>();
+  const [integrationError, setIntegrationError] = useState("");
   const toastId = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const activeBoard =
     boards.find((board) => board.id === activeBoardId) ?? boards[0];
+  const frequentItems = useMemo(() => getFrequentItems(boards), [boards]);
+  const displayedShelfItems = frequentMode
+    ? frequentItems
+    : (activeBoard?.items ?? []);
   const catalog = useMemo(() => getCatalog(locale), [locale]);
   const categories = useMemo(() => getCategories(locale), [locale]);
   const catalogEntries = useMemo(() => {
@@ -248,9 +265,8 @@ function App() {
     () =>
       catalogMode
         ? catalogEntries.map(selectionFromCatalog)
-        : (activeBoard?.items.map((item) => selectionFromItem(item, locale)) ??
-          []),
-    [activeBoard, catalogEntries, catalogMode, locale],
+        : displayedShelfItems.map((item) => selectionFromItem(item, locale)),
+    [catalogEntries, catalogMode, displayedShelfItems, locale],
   );
 
   const showToast = useCallback(
@@ -287,6 +303,70 @@ function App() {
       : "false";
   }, [locale, settings.reducedMotion, settings.theme]);
 
+  useEffect(() => {
+    if (!loaded) {
+      return;
+    }
+    void invoke("set_context_preferences", {
+      perAppBoardsEnabled: settings.perAppBoardsEnabled,
+      popupPositionBehavior: settings.popupPositionBehavior,
+    }).catch((error) => setIntegrationError(String(error)));
+    if (!settings.perAppBoardsEnabled) {
+      setForegroundContext(undefined);
+    }
+  }, [loaded, settings.perAppBoardsEnabled, settings.popupPositionBehavior]);
+
+  useEffect(() => {
+    if (!loaded) {
+      return;
+    }
+    void invoke<boolean>("get_autostart")
+      .then((enabled) => {
+        if (
+          typeof enabled === "boolean" &&
+          enabled !== useShelfStore.getState().settings.autostart
+        ) {
+          useShelfStore.getState().updateSettings({ autostart: enabled });
+        }
+      })
+      .catch((error) => setIntegrationError(String(error)));
+  }, [loaded]);
+
+  const refreshForegroundContext = useCallback(async () => {
+    if (!settings.perAppBoardsEnabled) {
+      return;
+    }
+    try {
+      const context = await invoke<ForegroundContext | null>(
+        "get_foreground_context",
+      );
+      setForegroundContext(context ?? undefined);
+      const mappedBoardId = context
+        ? appBoardMappings[context.executable]
+        : undefined;
+      if (mappedBoardId && boards.some((board) => board.id === mappedBoardId)) {
+        setActiveBoardId(mappedBoardId);
+        setFrequentMode(false);
+        setCatalogMode(false);
+        setQuery("");
+        setSelection(undefined);
+      }
+      setIntegrationError("");
+    } catch (error) {
+      setIntegrationError(String(error));
+    }
+  }, [appBoardMappings, boards, settings.perAppBoardsEnabled]);
+
+  useEffect(() => {
+    if (!loaded || !settings.perAppBoardsEnabled) {
+      return;
+    }
+    const onFocus = () => void refreshForegroundContext();
+    void refreshForegroundContext();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [loaded, refreshForegroundContext, settings.perAppBoardsEnabled]);
+
   const pasteSelection = useCallback(
     async (current: Selection, forceKeepOpen = false) => {
       const keepOpen =
@@ -298,7 +378,22 @@ function App() {
         settings.selectionBehavior,
         keepOpen,
       );
-      useShelfStore.getState().recordUse(current.payload);
+      const store = useShelfStore.getState();
+      const selectedItem = current.itemId
+        ? store.boards
+            .flatMap((board) => board.items)
+            .find((item) => item.id === current.itemId)
+        : undefined;
+      if (selectedItem) {
+        store.recordItemUse(selectedItem);
+      } else if (current.itemType !== "image") {
+        store.recordUse(
+          current.payload,
+          current.itemType === "sequence" || current.itemType === "symbol"
+            ? current.itemType
+            : "unicode",
+        );
+      }
       if (outcome === "copied") {
         showToast(
           settings.selectionBehavior === "copy-only"
@@ -377,6 +472,7 @@ function App() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.key.toLowerCase() === "f") {
         event.preventDefault();
+        setFrequentMode(false);
         setCatalogMode(true);
         searchRef.current?.focus();
         return;
@@ -391,6 +487,7 @@ function App() {
         if (board) {
           event.preventDefault();
           setActiveBoardId(board.id);
+          setFrequentMode(false);
           setCatalogMode(false);
           setQuery("");
         }
@@ -623,13 +720,16 @@ function App() {
       />
 
       <main className="shelf-app">
-        {(loadError || saveError) && (
+        {(loadError || saveError || integrationError) && (
           <div className="error-banner" role="alert">
             <span>!</span>
-            <p>{loadError ?? saveError}</p>
-            {saveError ? (
+            <p>{loadError ?? saveError ?? integrationError}</p>
+            {saveError || integrationError ? (
               <button
-                onClick={() => useShelfStore.getState().clearSaveError()}
+                onClick={() => {
+                  useShelfStore.getState().clearSaveError();
+                  setIntegrationError("");
+                }}
                 type="button"
               >
                 ×
@@ -643,9 +743,13 @@ function App() {
           <input
             onChange={(event) => {
               setQuery(event.target.value);
+              setFrequentMode(false);
               setCatalogMode(true);
             }}
-            onFocus={() => setCatalogMode(true)}
+            onFocus={() => {
+              setFrequentMode(false);
+              setCatalogMode(true);
+            }}
             placeholder={translate(locale, "searchPlaceholder")}
             ref={searchRef}
             type="search"
@@ -679,6 +783,7 @@ function App() {
                   }
                   onClick={() => {
                     setActiveBoardId(board.id);
+                    setFrequentMode(false);
                     setCatalogMode(false);
                     setQuery("");
                     setSelection(undefined);
@@ -729,6 +834,22 @@ function App() {
           </nav>
           <div className="shelf-tools">
             <button
+              aria-pressed={frequentMode}
+              className={
+                frequentMode ? "frequent-toggle is-active" : "frequent-toggle"
+              }
+              onClick={() => {
+                setFrequentMode(true);
+                setCatalogMode(false);
+                setEditMode(false);
+                setQuery("");
+                setSelection(undefined);
+              }}
+              type="button"
+            >
+              ★ {translate(locale, "frequent")}
+            </button>
+            <button
               aria-pressed={composeOpen}
               className={
                 composeOpen ? "compose-toggle is-active" : "compose-toggle"
@@ -743,6 +864,7 @@ function App() {
             </button>
             <button
               className={editMode ? "is-active" : ""}
+              disabled={frequentMode}
               onClick={() => setEditMode((editing) => !editing)}
               type="button"
             >
@@ -750,7 +872,7 @@ function App() {
                 ? translate(locale, "finishEditing")
                 : translate(locale, "editShelf")}
             </button>
-            {editMode && activeBoard ? (
+            {editMode && !frequentMode && activeBoard ? (
               <button
                 aria-label={translate(locale, "actions")}
                 className="icon-button"
@@ -823,13 +945,15 @@ function App() {
                     ? query
                       ? translate(locale, "searchResults")
                       : categories.find((item) => item.id === category)?.label
-                    : activeBoard?.name}
+                    : frequentMode
+                      ? translate(locale, "frequent")
+                      : activeBoard?.name}
                 </strong>
               </div>
               <span>
                 {catalogMode
                   ? catalogEntries.length
-                  : (activeBoard?.items.length ?? 0)}{" "}
+                  : displayedShelfItems.length}{" "}
                 {translate(locale, "items")}
               </span>
             </header>
@@ -850,37 +974,54 @@ function App() {
                   <p>{translate(locale, "noResultsBody")}</p>
                 </div>
               )
-            ) : activeBoard?.items.length ? (
+            ) : displayedShelfItems.length ? (
               <ShelfGrid
-                editMode={editMode}
-                items={activeBoard.items}
+                editMode={editMode && !frequentMode}
+                items={displayedShelfItems}
                 locale={locale}
-                onRemove={(itemId) =>
-                  useShelfStore
-                    .getState()
-                    .removeItemFromBoard(activeBoard.id, itemId)
-                }
-                onReorder={(fromIndex, toIndex) =>
-                  useShelfStore
-                    .getState()
-                    .moveItemWithinBoard(activeBoard.id, fromIndex, toIndex)
-                }
+                onRemove={(itemId) => {
+                  if (activeBoard && !frequentMode) {
+                    useShelfStore
+                      .getState()
+                      .removeItemFromBoard(activeBoard.id, itemId);
+                  }
+                }}
+                onReorder={(fromIndex, toIndex) => {
+                  if (activeBoard && !frequentMode) {
+                    useShelfStore
+                      .getState()
+                      .moveItemWithinBoard(activeBoard.id, fromIndex, toIndex);
+                  }
+                }}
                 onSelect={selectShelfItem}
                 renderer={settings.renderer}
                 selectedId={selection?.itemId}
+                shelfGlow={settings.shelfGlow}
               />
             ) : (
               <div className="empty-state shelf-empty">
-                <span aria-hidden="true">✨</span>
-                <h2>{translate(locale, "emptyShelf")}</h2>
-                <p>{translate(locale, "emptyShelfBody")}</p>
-                <button
-                  className="primary-button"
-                  onClick={() => setCatalogMode(true)}
-                  type="button"
-                >
-                  {translate(locale, "browseEmoji")}
-                </button>
+                <span aria-hidden="true">{frequentMode ? "★" : "✨"}</span>
+                <h2>
+                  {translate(
+                    locale,
+                    frequentMode ? "emptyFrequent" : "emptyShelf",
+                  )}
+                </h2>
+                <p>
+                  {translate(
+                    locale,
+                    frequentMode ? "emptyFrequentBody" : "emptyShelfBody",
+                  )}
+                </p>
+                {!frequentMode ? (
+                  <button
+                    className="primary-button"
+                    onClick={() => setCatalogMode(true)}
+                    type="button"
+                  >
+                    {translate(locale, "browseEmoji")}
+                  </button>
+                ) : null}
               </div>
             )}
           </div>
@@ -914,6 +1055,12 @@ function App() {
                     <dt>{locale === "ja" ? "キーワード" : "Keywords"}</dt>
                     <dd>{selection.keywords.slice(0, 4).join(", ") || "—"}</dd>
                   </div>
+                  {selection.useCount !== undefined ? (
+                    <div>
+                      <dt>{translate(locale, "usageCount")}</dt>
+                      <dd>{selection.useCount}</dd>
+                    </div>
+                  ) : null}
                 </dl>
                 <div className="detail-actions">
                   <button
@@ -943,7 +1090,7 @@ function App() {
                       {translate(locale, "addToShelf")}
                     </button>
                   ) : null}
-                  {selection.source === "shelf" && editMode ? (
+                  {selection.source === "shelf" && editMode && !frequentMode ? (
                     <button
                       className="danger-quiet"
                       onClick={removeSelection}
@@ -952,7 +1099,7 @@ function App() {
                       {translate(locale, "removeFromShelf")}
                     </button>
                   ) : null}
-                  {boards.length > 1 ? (
+                  {boards.length > 1 && !frequentMode ? (
                     <label className="board-target-field">
                       <span>
                         {selection.source === "shelf"
@@ -1431,6 +1578,172 @@ function App() {
               />
               <span>{translate(locale, "reducedMotion")}</span>
             </label>
+            <section
+              className="settings-section"
+              aria-labelledby="usage-settings-title"
+            >
+              <h3 id="usage-settings-title">
+                {translate(locale, "usageIntelligence")}
+              </h3>
+              <label className="toggle-field">
+                <input
+                  checked={settings.usageTrackingEnabled}
+                  onChange={(event) =>
+                    useShelfStore.getState().updateSettings({
+                      usageTrackingEnabled: event.target.checked,
+                    })
+                  }
+                  type="checkbox"
+                />
+                <span>{translate(locale, "usageTracking")}</span>
+              </label>
+              <label className="toggle-field">
+                <input
+                  checked={settings.shelfGlow}
+                  disabled={!settings.usageTrackingEnabled}
+                  onChange={(event) =>
+                    useShelfStore
+                      .getState()
+                      .updateSettings({ shelfGlow: event.target.checked })
+                  }
+                  type="checkbox"
+                />
+                <span>{translate(locale, "shelfGlow")}</span>
+              </label>
+              <button
+                className="quiet-button settings-inline-action"
+                onClick={() => {
+                  if (window.confirm(translate(locale, "resetUsageConfirm"))) {
+                    useShelfStore.getState().resetUsageStatistics();
+                    setSelection(undefined);
+                    showToast(translate(locale, "usageReset"));
+                  }
+                }}
+                type="button"
+              >
+                {translate(locale, "resetUsage")}
+              </button>
+            </section>
+            <section
+              className="settings-section"
+              aria-labelledby="context-settings-title"
+            >
+              <h3 id="context-settings-title">
+                {translate(locale, "contextAware")}
+              </h3>
+              <label className="toggle-field">
+                <input
+                  checked={settings.perAppBoardsEnabled}
+                  onChange={(event) =>
+                    useShelfStore.getState().updateSettings({
+                      perAppBoardsEnabled: event.target.checked,
+                    })
+                  }
+                  type="checkbox"
+                />
+                <span>{translate(locale, "perAppBoards")}</span>
+              </label>
+              <p className="settings-note">
+                {translate(locale, "perAppBoardsDescription")}
+              </p>
+              {settings.perAppBoardsEnabled ? (
+                <div className="application-mapping-card">
+                  {foregroundContext ? (
+                    <>
+                      <div className="application-context-row">
+                        <span>{translate(locale, "currentApplication")}</span>
+                        <code>{foregroundContext.executable}</code>
+                      </div>
+                      <div className="application-context-row">
+                        <span>{translate(locale, "currentMonitor")}</span>
+                        <code>{foregroundContext.monitor}</code>
+                      </div>
+                      <label className="form-field">
+                        <span>{translate(locale, "mapToBoard")}</span>
+                        <select
+                          onChange={(event) => {
+                            const boardId = event.target.value || undefined;
+                            useShelfStore
+                              .getState()
+                              .setAppBoardMapping(
+                                foregroundContext.executable,
+                                boardId,
+                              );
+                          }}
+                          value={
+                            appBoardMappings[foregroundContext.executable] ?? ""
+                          }
+                        >
+                          <option value="">
+                            {translate(locale, "automaticBoard")}
+                          </option>
+                          {boards.map((board) => (
+                            <option key={board.id} value={board.id}>
+                              {board.icon} {board.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </>
+                  ) : (
+                    <p>{translate(locale, "applicationUnavailable")}</p>
+                  )}
+                  <button
+                    className="quiet-button settings-inline-action"
+                    onClick={() => void refreshForegroundContext()}
+                    type="button"
+                  >
+                    {translate(locale, "refresh")}
+                  </button>
+                </div>
+              ) : null}
+            </section>
+            <section
+              className="settings-section"
+              aria-labelledby="windows-settings-title"
+            >
+              <h3 id="windows-settings-title">
+                {translate(locale, "windowsIntegration")}
+              </h3>
+              <label className="toggle-field">
+                <input
+                  checked={settings.autostart}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    setIntegrationError("");
+                    void useShelfStore
+                      .getState()
+                      .setAutostart(enabled)
+                      .then(
+                        () => showToast(translate(locale, "saved")),
+                        (error) => setIntegrationError(String(error)),
+                      );
+                  }}
+                  type="checkbox"
+                />
+                <span>{translate(locale, "startWithWindows")}</span>
+              </label>
+              <label className="form-field">
+                <span>{translate(locale, "popupPosition")}</span>
+                <select
+                  onChange={(event) =>
+                    useShelfStore.getState().updateSettings({
+                      popupPositionBehavior: event.target
+                        .value as typeof settings.popupPositionBehavior,
+                    })
+                  }
+                  value={settings.popupPositionBehavior}
+                >
+                  <option value="active-monitor">
+                    {translate(locale, "activeMonitor")}
+                  </option>
+                  <option value="remember-last">
+                    {translate(locale, "rememberLast")}
+                  </option>
+                </select>
+              </label>
+              <p className="settings-note">{translate(locale, "trayHint")}</p>
+            </section>
             <form
               className="shortcut-form"
               onSubmit={(event) => {
