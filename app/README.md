@@ -137,9 +137,9 @@ Autostart時はウィンドウを出さずTrayで待機する。Trayの左クリ
 - Updaterの同意・鍵・公開条件は[`docs/updater.md`](docs/updater.md)を参照。
 - 正式Updaterを有効にする場合だけ、公開鍵をコンパイル時に設定する。
 
-実Tauri E2Eには`tauri-driver`と、端末のWebView2 Runtimeに一致する`msedgedriver`が必要です。
-CIはTauri公式手順の`msedgedriver-tool`を固定コミットから導入し、検出したWebView2と同じ
-バージョン／アーキテクチャのDriverでx64と`windows-11-arm`の両方を検証します。
+実Tauri E2EはTauri／WebdriverIOの推奨する埋め込みWebDriverとIPC支援を、テスト専用`wdio` Featureで有効化します。
+外部`tauri-driver`や手動の`msedgedriver`準備は不要で、正式ビルドにはテスト用プラグインを含めません。
+CIはx64と`windows-11-arm`の両方で同じ実ウィンドウ操作を検証します。
 署名済み公開手順と外部ゲートは[`docs/release.md`](docs/release.md)を参照してください。
 
 ```text

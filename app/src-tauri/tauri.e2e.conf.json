@@ -2,11 +2,31 @@
   "$schema": "https://schema.tauri.app/config/2",
   "identifier": "com.emoshelf.e2e",
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
-        "title": "EmoShelf E2E"
+        "title": "EmoShelf"
       }
-    ]
+    ],
+    "security": {
+      "capabilities": [
+        {
+          "identifier": "e2e",
+          "description": "Test-only capability for the embedded WebDriver server",
+          "windows": ["main"],
+          "permissions": [
+            "core:default",
+            "opener:default",
+            "clipboard-manager:default",
+            "clipboard-manager:allow-write-text",
+            "dialog:default",
+            "updater:default",
+            "wdio:default",
+            "wdio-webdriver:default"
+          ]
+        }
+      ]
+    }
   },
   "bundle": {
     "active": false
