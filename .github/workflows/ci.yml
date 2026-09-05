@@ -112,8 +112,6 @@ jobs:
         run: pnpm test:e2e
         env:
           EMOSHELF_E2E_SKIP_BUILD: "1"
-        env:
-          EMOSHELF_E2E_SKIP_BUILD: "1"
 
   package-windows:
     name: Windows packaging (${{ matrix.arch }} / ${{ matrix.bundle }})
