@@ -44,9 +44,11 @@ Keyboard controls:
 
 ## Install
 
-Official builds target Windows 11 on x64 and ARM64. After the external signing gates are complete, signed installers and checksums are published on [GitHub Releases](https://github.com/ELRdn/EmoShelf/releases).
+Official builds target Windows 11 on x64 and ARM64. Signed installers and checksums are published on [GitHub Releases](https://github.com/ELRdn/EmoShelf/releases) after the external signing gates are complete.
 
-Formal `v1.0.0` artifacts are released only after SignPath Foundation approval, Authenticode verification, updater-signature verification, and installer smoke tests. Do not redistribute an unsigned CI artifact as an official release.
+To establish the public release history required for a SignPath Foundation application, EmoShelf may publish a clearly labelled **unsigned prerelease**. The current [v1.0.0 RC 1](https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0-rc.1) is such an application build: it is not the formal release, and Windows may show an unknown-publisher or SmartScreen warning.
+
+Formal `v1.0.0` artifacts are released only after SignPath Foundation approval, Authenticode verification, updater-signature verification, and installer smoke tests. Do not redistribute an unsigned prerelease or CI artifact as an official release.
 
 ## Privacy and security
 
