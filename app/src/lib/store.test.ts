@@ -21,6 +21,7 @@ describe("shelf store", () => {
       loadError: undefined,
       saveError: undefined,
       persistenceBlocked: false,
+      recoveredFromBackup: false,
     });
   });
 
@@ -304,6 +305,52 @@ describe("shelf store", () => {
     ];
 
     expect(countAssetReferences(state, image.assetId)).toBe(2);
+  });
+
+  it("surfaces backup recovery after initialization", async () => {
+    const initial = createInitialState();
+    useShelfStore.setState({ loaded: false, recoveredFromBackup: false });
+    mockedInvoke.mockImplementation(async (command) => {
+      if (command === "load_state") {
+        return JSON.stringify(initial);
+      }
+      if (command === "take_recovery_notice") {
+        return true;
+      }
+      return undefined;
+    });
+
+    await useShelfStore.getState().initialize();
+
+    expect(useShelfStore.getState().recoveredFromBackup).toBe(true);
+    expect(useShelfStore.getState().persistenceBlocked).toBe(false);
+  });
+
+  it("creates and restores a validated settings-only backup", async () => {
+    const restored = {
+      ...createInitialState().settings,
+      theme: "light" as const,
+      globalShortcut: "Ctrl+Shift+E",
+    };
+    mockedInvoke.mockImplementation(async (command) => {
+      if (command === "load_settings_backup") {
+        return JSON.stringify({ schemaVersion: 2, settings: restored });
+      }
+      return undefined;
+    });
+
+    await useShelfStore.getState().createSettingsBackup();
+    expect(mockedInvoke).toHaveBeenCalledWith("create_settings_backup", {
+      content: expect.stringContaining('"schemaVersion":2'),
+    });
+
+    await expect(
+      useShelfStore.getState().restoreSettingsBackup(),
+    ).resolves.toBe(true);
+    expect(useShelfStore.getState().settings.theme).toBe("light");
+    expect(mockedInvoke).toHaveBeenCalledWith("set_global_shortcut", {
+      shortcut: "Ctrl+Shift+E",
+    });
   });
 
   it("registers a deduplicated asset and refuses to delete it while referenced", async () => {

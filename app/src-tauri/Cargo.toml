@@ -1,6 +1,6 @@
 [package]
 name = "emoshelf"
-version = "0.4.0"
+version = "0.5.0"
 description = "Your personal emoji shelf."
 authors = ["EmoShelf Contributors"]
 edition = "2021"
@@ -44,6 +44,7 @@ base64 = "0.22"
 resvg = { version = "0.48.1", default-features = false }
 ed25519-dalek = "2.2"
 semver = "1"
+tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-core = "0.61"

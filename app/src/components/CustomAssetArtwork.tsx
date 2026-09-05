@@ -54,6 +54,8 @@ export function CustomAssetArtwork({
       draggable={false}
       onError={() => setFailed(true)}
       src={source}
+      height={64}
+      width={64}
     />
   );
 }

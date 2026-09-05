@@ -5,6 +5,7 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  color-scheme: dark;
   --background: #111113;
   --surface: #18181b;
   --surface-soft: #1e1e23;
@@ -26,6 +27,7 @@
 }
 
 :root[data-theme="light"] {
+  color-scheme: light;
   --background: #eeeef2;
   --surface: #fafafd;
   --surface-soft: #f1f0f6;
@@ -48,6 +50,7 @@
 
 @media (prefers-color-scheme: light) {
   :root[data-theme="system"] {
+    color-scheme: light;
     --background: #eeeef2;
     --surface: #fafafd;
     --surface-soft: #f1f0f6;
@@ -98,6 +101,23 @@ select:focus-visible,
 a:focus-visible {
   outline: 2px solid var(--purple);
   outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  z-index: 1000;
+  top: 6px;
+  left: 8px;
+  padding: 8px 12px;
+  color: var(--text);
+  background: var(--elevated);
+  border: 2px solid var(--purple);
+  border-radius: 7px;
+  transform: translateY(-150%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
 }
 
 .app-shell {
@@ -212,7 +232,8 @@ a:focus-visible {
   padding: 12px 14px 10px;
 }
 
-.error-banner {
+.error-banner,
+.recovery-banner {
   display: flex;
   gap: 9px;
   align-items: center;
@@ -224,15 +245,58 @@ a:focus-visible {
   border-radius: 8px;
 }
 
-.error-banner p {
+.recovery-banner {
+  color: var(--text);
+  background: color-mix(in srgb, var(--green) 14%, var(--surface));
+  border-color: color-mix(in srgb, var(--green) 44%, transparent);
+}
+
+.error-banner p,
+.recovery-banner p {
   flex: 1;
   margin: 0;
   font-size: 12px;
 }
 
-.error-banner button {
+.error-banner button,
+.recovery-banner button {
   background: transparent;
   border: 0;
+}
+
+.settings-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-button-row button {
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.performance-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.performance-metrics div {
+  min-width: 0;
+}
+
+.performance-metrics dt {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.performance-metrics dd {
+  margin: 2px 0 0;
+  color: var(--text);
+  font:
+    600 11px / 1.4 "Cascadia Mono",
+    monospace;
 }
 
 .search-field {
@@ -1958,4 +2022,41 @@ kbd {
   transition-duration: 0.01ms;
   animation-duration: 0.01ms;
   animation-iteration-count: 1;
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --border: #777580;
+    --border-strong: #aaa7b2;
+    --text-secondary: #d2d0d8;
+    --text-muted: #b7b4bf;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  a:focus-visible {
+    outline-width: 3px;
+  }
+}
+
+@media (forced-colors: active) {
+  .app-shell,
+  .modal-card,
+  .settings-section,
+  .emoji-tile,
+  .shelf-item-button,
+  .custom-asset-card > button:first-child {
+    color: CanvasText;
+    background: Canvas;
+    border: 1px solid CanvasText;
+    box-shadow: none;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  a:focus-visible {
+    outline: 3px solid Highlight;
+  }
 }

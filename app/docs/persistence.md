@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | アプリ状態 | `appLocalData` (`AppData/...`) | `state.json` |
 | 自動バックアップ | 同上 | `state.json.bak` |
+| 明示的な設定バックアップ | 同上 | `settings-backup.json` |
 | カスタム画像 | `appLocalData/custom-assets` | `<sha256>.png` |
 | Renderer Pack | `appLocalData/renderer-packs` | Renderer ID別ディレクトリ |
 
@@ -108,9 +109,19 @@
 1. **読み書きはアトミックに** — 一時ファイルへ書いてからrenameする。
 2. **未知フィールドは保持** — 既知schema内の拡張値を`extensions`へ保持する。
 3. **未来schemaは上書き禁止** — 対応版より新しいデータでは永続化を停止する。
-4. **破損時は起動を止めない** — `.bak`から復元し、失敗時は初期状態と通知を使う。
+4. **破損時はfail-closed** — `.bak`から復元し、両方が壊れている場合は読み取り専用にして既存データを上書きしない。
 5. **マイグレーションは一方向** — `parseAppState`内でv1からv2へ一度だけ変換する。
 6. **使用統計は端末外に出さない** — `usage` / `recent`を解析送信しない。
+
+## 復旧と設定バックアップ
+
+- `state.json`が壊れていて`state.json.bak`が有効な場合は、バックアップを読み込んだことを
+  UIで通知する。
+- 両方が存在するのに読めない場合は`STATE_RECOVERY_FAILED`として扱い、保存・Import・設定変更を
+  停止する。空の初期状態で上書きしてはならない。
+- 設定画面から現在の`settings`だけを`settings-backup.json`へ明示的に保存・復元できる。
+- 設定バックアップもschemaと全項目を検証し、不正JSONや未来schemaは適用しない。
+- 設定復元時のショートカット登録または状態保存に失敗した場合、従来の設定とショートカットを維持する。
 
 ## v0.3のプライバシー境界
 

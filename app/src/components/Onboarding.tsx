@@ -64,7 +64,7 @@ export function Onboarding({ locale, renderer, onFinish }: OnboardingProps) {
 
   if (step === "welcome") {
     return (
-      <main className="onboarding welcome-panel">
+      <main className="onboarding welcome-panel" id="main-content">
         <div className="welcome-mark" aria-hidden="true">
           <div className="welcome-face">😎</div>
           <div className="welcome-shelf" />
@@ -115,7 +115,7 @@ export function Onboarding({ locale, renderer, onFinish }: OnboardingProps) {
   };
 
   return (
-    <main className="onboarding pick-panel">
+    <main className="onboarding pick-panel" id="main-content">
       <header className="pick-heading">
         <div>
           <p className="eyebrow">EmoShelf / 01</p>

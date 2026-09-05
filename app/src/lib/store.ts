@@ -8,6 +8,7 @@ import {
   FutureStateVersionError,
   type NewShelfItem,
   parseAppState,
+  parseSettingsBackup,
   type Settings,
   type ShelfItem,
   type TextShelfItem,
@@ -134,9 +135,12 @@ export interface ShelfStore extends AppState {
   loaded: boolean;
   loadError?: string;
   saveError?: string;
+  recoveredFromBackup: boolean;
   persistenceBlocked: boolean;
   initialize: () => Promise<void>;
   persistNow: () => Promise<void>;
+  createSettingsBackup: () => Promise<void>;
+  restoreSettingsBackup: () => Promise<boolean>;
   addBoard: (name: string, icon?: string) => string;
   renameBoard: (boardId: string, name: string) => void;
   setBoardIcon: (boardId: string, icon: string | undefined) => void;
@@ -190,6 +194,7 @@ export interface ShelfStore extends AppState {
   resetOnboarding: () => void;
   resetAll: () => void;
   clearSaveError: () => void;
+  clearRecoveryNotice: () => void;
 }
 
 function withSave(
@@ -205,6 +210,7 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
   ...createInitialState(),
   loaded: false,
   persistenceBlocked: false,
+  recoveredFromBackup: false,
 
   initialize: async () => {
     if (get().loaded) {
@@ -219,15 +225,24 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
         set({ loaded: true });
       }
     } catch (error) {
-      const blocked = error instanceof FutureStateVersionError;
+      const futureVersion = error instanceof FutureStateVersionError;
       set({
         loaded: true,
-        persistenceBlocked: blocked,
-        loadError: blocked
+        persistenceBlocked: true,
+        loadError: futureVersion
           ? "このデータは新しいEmoShelfで作成されています。上書きを防ぐため読み取り専用で起動しました。"
-          : "保存データを読み込めなかったため、初期状態で起動しました。",
+          : "保存データとバックアップを安全に読み込めませんでした。上書きを防ぐため読み取り専用で起動しました。",
       });
       console.error("EmoShelf: state load failed", error);
+    }
+
+    try {
+      const recovered = await invoke<boolean>("take_recovery_notice");
+      if (recovered) {
+        set({ recoveredFromBackup: true });
+      }
+    } catch (error) {
+      console.error("EmoShelf: recovery status unavailable", error);
     }
 
     try {
@@ -249,6 +264,43 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
     }
     await invoke("save_state", { content: serialize(get()) });
     set({ saveError: undefined });
+  },
+
+  createSettingsBackup: async () => {
+    await get().persistNow();
+    await invoke("create_settings_backup", { content: serialize(get()) });
+  },
+
+  restoreSettingsBackup: async () => {
+    const raw = await invoke<string | null>("load_settings_backup");
+    if (raw === null) {
+      return false;
+    }
+    const restored = parseSettingsBackup(JSON.parse(raw) as unknown);
+    const previousSettings = get().settings;
+    const currentShortcut = previousSettings.globalShortcut;
+    if (restored.globalShortcut !== currentShortcut) {
+      await invoke("set_global_shortcut", {
+        shortcut: restored.globalShortcut,
+      });
+    }
+    set({ settings: restored, saveError: undefined });
+    try {
+      await get().persistNow();
+      return true;
+    } catch (error) {
+      set({ settings: previousSettings, saveError: String(error) });
+      if (restored.globalShortcut !== currentShortcut) {
+        try {
+          await invoke("set_global_shortcut", { shortcut: currentShortcut });
+        } catch (rollbackError) {
+          throw new Error(
+            `${String(error)}; shortcut rollback failed: ${String(rollbackError)}`,
+          );
+        }
+      }
+      throw error;
+    }
   },
 
   addBoard: (name, icon) => {
@@ -756,4 +808,5 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
   },
 
   clearSaveError: () => set({ saveError: undefined }),
+  clearRecoveryNotice: () => set({ recoveredFromBackup: false }),
 }));

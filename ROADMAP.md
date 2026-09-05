@@ -421,21 +421,30 @@ Custom content must not compromise:
 **Theme:** *Make EmoShelf feel finished.*
 
 - [ ] Screen-reader review
-- [ ] Full keyboard audit
-- [ ] Focus-visible audit
-- [ ] Color contrast audit
-- [ ] Reduced-motion validation
+- [x] Full keyboard audit
+- [x] Focus-visible audit
+- [x] Color contrast audit
+- [x] Reduced-motion validation
 - [ ] Large text / scaling
 - [ ] 125% / 150% / 200% Windows scaling
-- [ ] Multi-monitor behavior
+- [x] Multi-monitor behavior
 - [ ] High-DPI emoji rendering
-- [ ] Search quality improvements
-- [ ] Japanese search improvements
-- [ ] Startup-performance profiling
-- [ ] Memory profiling
-- [ ] Crash recovery
-- [ ] Settings backup
-- [ ] Update flow
+- [x] Search quality improvements
+- [x] Japanese search improvements
+- [x] Startup-performance profiling
+- [x] Memory profiling
+- [x] Crash recovery
+- [x] Settings backup
+- [x] Update flow
+
+モーダルのfocus trap／復帰、skip link、セマンティック要素、axe、forced-colors、
+prefers-contrast、Reduced Motionを自動検証した。1949件の検索はp95 100ms未満をテストし、
+絵文字データを静的JSONへ分離して全JavaScript chunkを500KiB以下に制限した。
+
+Windows実機では起動→操作可能77.5ms、JavaScript heap 6.4MiB、非同期化したホットキー
+表示要求0.1msを確認した。ホットキー値は再起動後1 sampleのため、10 sample以上のp95証跡は
+v1.0手動ゲートへ残す。Narrator、125%／150%／200%、大文字、高DPI、120/144Hz以上も、
+端末設定を安全に復元できる手順と人手を伴うため未受入のままとする。
 
 ---
 
