@@ -1373,7 +1373,13 @@ fn drag_image_asset(_app: tauri::AppHandle, _asset_id: String) -> Result<(), Str
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(feature = "wdio")]
+    let builder = builder
+        .plugin(tauri_plugin_wdio::init())
+        .plugin(tauri_plugin_wdio_webdriver::init());
+
+    builder
         .manage(ActiveShortcut(Mutex::new(None)))
         .manage(PasteTarget(Mutex::new(None)))
         .manage(CapturedContext(Mutex::new(None)))
@@ -1435,41 +1441,52 @@ pub fn run() {
                         .build(),
                 )?;
             }
-            let show_item = MenuItem::with_id(app, "show", "Open EmoShelf", true, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
-            let mut tray = TrayIconBuilder::with_id("main")
-                .tooltip("EmoShelf — Alt+E")
-                .menu(&menu)
-                .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "show" => {
-                        remember_foreground_target(app);
-                        reveal_main_window(app);
-                    }
-                    "quit" => app.exit(0),
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        remember_foreground_target(tray.app_handle());
-                        reveal_main_window(tray.app_handle());
-                    }
-                });
-            if let Some(icon) = app.default_window_icon() {
-                tray = tray.icon(icon.clone());
+            // 埋め込みWebDriverはWindows CIの非対話セッションでも実WebViewを起動する。
+            // Trayとグローバルショートカットは手動スモーク対象なのでE2E起動時だけ省く。
+            let webdriver_session =
+                cfg!(feature = "wdio") && std::env::var_os("TAURI_WEBDRIVER_PORT").is_some();
+            if !webdriver_session {
+                let show_item =
+                    MenuItem::with_id(app, "show", "Open EmoShelf", true, None::<&str>)?;
+                let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+                let mut tray = TrayIconBuilder::with_id("main")
+                    .tooltip("EmoShelf — Alt+E")
+                    .menu(&menu)
+                    .show_menu_on_left_click(false)
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "show" => {
+                            remember_foreground_target(app);
+                            reveal_main_window(app);
+                        }
+                        "quit" => app.exit(0),
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            remember_foreground_target(tray.app_handle());
+                            reveal_main_window(tray.app_handle());
+                        }
+                    });
+                if let Some(icon) = app.default_window_icon() {
+                    tray = tray.icon(icon.clone());
+                }
+                tray.build(app)?;
             }
-            tray.build(app)?;
 
             if std::env::args().any(|argument| argument == AUTOSTART_ARG) {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.hide();
                 }
+            }
+
+            if webdriver_session {
+                return Ok(());
             }
 
             // 設定読み込み前のフォールバックとして既定ショートカットを登録する。

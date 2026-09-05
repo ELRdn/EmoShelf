@@ -1,0 +1,42 @@
+name: Bug report
+description: Report a reproducible EmoShelf problem
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve EmoShelf. Do not include secrets or vulnerability details here; use the Security Advisory flow described in SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: EmoShelf version
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Windows architecture
+      options:
+        - x64
+        - ARM64
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Include expected behavior and the smallest reliable reproduction.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Relevant environment
+      description: Windows version, display scaling, monitor setup, renderer, and target application where relevant.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots or logs
+      description: Remove personal data, paths, clipboard content, and secrets first.

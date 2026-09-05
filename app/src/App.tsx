@@ -157,7 +157,7 @@ function TitleBar({
         </span>
         <strong data-tauri-drag-region>EmoShelf</strong>
         <span className="version-pill" data-tauri-drag-region>
-          v0.5
+          v1.0
         </span>
       </div>
       <div className="window-controls">

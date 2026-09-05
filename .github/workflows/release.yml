@@ -1,0 +1,621 @@
+name: Signed Windows release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: SemVer without the leading v
+        required: true
+        default: 1.0.0
+      confirmation:
+        description: Type RELEASE_v1.0.0 after every manual gate is complete
+        required: true
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: signed-release
+  cancel-in-progress: false
+
+env:
+  SIGNPATH_PROJECT_SLUG: emoshelf
+  SIGNPATH_SIGNING_POLICY_SLUG: release-signing
+  SIGNPATH_EXECUTABLE_ARTIFACT_CONFIGURATION: windows-executable
+  SIGNPATH_INSTALLER_ARTIFACT_CONFIGURATION: windows-installers
+
+jobs:
+  preflight:
+    name: Public release gate
+    runs-on: ubuntu-latest
+    environment: production-signing
+    env:
+      REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+      SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+      EMOSHELF_UPDATER_PRIVATE_KEY: ${{ secrets.EMOSHELF_UPDATER_PRIVATE_KEY }}
+      EMOSHELF_UPDATER_PRIVATE_KEY_PASSWORD: ${{ secrets.EMOSHELF_UPDATER_PRIVATE_KEY_PASSWORD }}
+      EMOSHELF_UPDATER_PUBLIC_KEY: ${{ secrets.EMOSHELF_UPDATER_PUBLIC_KEY }}
+      EMOSHELF_RENDERER_PRIVATE_KEY: ${{ secrets.EMOSHELF_RENDERER_PRIVATE_KEY }}
+      EMOSHELF_RENDERER_PRIVATE_KEY_PASSWORD: ${{ secrets.EMOSHELF_RENDERER_PRIVATE_KEY_PASSWORD }}
+      EMOSHELF_RENDERER_PUBLIC_KEY_BASE64: ${{ secrets.EMOSHELF_RENDERER_PUBLIC_KEY_BASE64 }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Audit the complete Git history for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - name: Validate immutable release intent and external gates
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+          RELEASE_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          test "$RELEASE_REF" = "refs/heads/main"
+          test "$REPOSITORY_PRIVATE" = "false"
+          test "$RELEASE_VERSION" = "1.0.0"
+          test "$RELEASE_CONFIRMATION" = "RELEASE_v1.0.0"
+          for required_name in \
+            SIGNPATH_ORGANIZATION_ID \
+            SIGNPATH_API_TOKEN \
+            EMOSHELF_UPDATER_PRIVATE_KEY \
+            EMOSHELF_UPDATER_PRIVATE_KEY_PASSWORD \
+            EMOSHELF_UPDATER_PUBLIC_KEY \
+            EMOSHELF_RENDERER_PRIVATE_KEY \
+            EMOSHELF_RENDERER_PRIVATE_KEY_PASSWORD \
+            EMOSHELF_RENDERER_PUBLIC_KEY_BASE64
+          do
+            test -n "${!required_name}" || {
+              echo "::error::Required release secret or variable is missing: $required_name"
+              exit 1
+            }
+          done
+          test "$EMOSHELF_UPDATER_PRIVATE_KEY" != "$EMOSHELF_RENDERER_PRIVATE_KEY"
+          test "$EMOSHELF_UPDATER_PUBLIC_KEY" != "$EMOSHELF_RENDERER_PUBLIC_KEY_BASE64"
+
+      - name: Confirm renderer public key shape
+        shell: pwsh
+        run: |
+          $bytes = [Convert]::FromBase64String($env:EMOSHELF_RENDERER_PUBLIC_KEY_BASE64)
+          if ($bytes.Length -ne 32) {
+            throw "Renderer public key must decode to 32 Ed25519 bytes."
+          }
+
+      - run: pnpm install --frozen-lockfile
+        working-directory: app
+      - run: pnpm release:audit
+        working-directory: app
+
+      - name: Refuse an existing release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "v${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "::error::Release v${{ inputs.version }} already exists."
+            exit 1
+          fi
+          if git rev-parse --verify "refs/tags/v${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "::error::Tag v${{ inputs.version }} already exists."
+            exit 1
+          fi
+
+      - name: Require successful CI for the exact release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          conclusion="$(
+            gh run list \
+              --workflow ci.yml \
+              --commit "$GITHUB_SHA" \
+              --event push \
+              --limit 20 \
+              --json conclusion,headSha \
+              --jq '.[0].conclusion // ""'
+          )"
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::The exact main commit must have a successful CI push run before release (found: ${conclusion:-none})."
+            exit 1
+          fi
+
+  renderer-packs:
+    name: Signed renderer packs
+    needs: preflight
+    runs-on: ubuntu-latest
+    environment: production-signing
+    env:
+      EMOSHELF_RENDERER_PRIVATE_KEY: ${{ secrets.EMOSHELF_RENDERER_PRIVATE_KEY }}
+      EMOSHELF_RENDERER_PRIVATE_KEY_PASSWORD: ${{ secrets.EMOSHELF_RENDERER_PRIVATE_KEY_PASSWORD }}
+      EMOSHELF_RENDERER_PUBLIC_KEY_BASE64: ${{ secrets.EMOSHELF_RENDERER_PUBLIC_KEY_BASE64 }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+        working-directory: app
+
+      - name: Fetch only the pinned official SVG sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p renderer-sources
+
+          fetch_sparse_source() {
+            local renderer_name="$1"
+            local repository_url="$2"
+            local source_commit="$3"
+            shift 3
+            git clone --filter=blob:none --no-checkout "$repository_url" "renderer-sources/$renderer_name"
+            git -C "renderer-sources/$renderer_name" sparse-checkout init --no-cone
+            printf '%s\n' "$@" | git -C "renderer-sources/$renderer_name" sparse-checkout set --stdin
+            git -C "renderer-sources/$renderer_name" fetch --depth 1 origin "$source_commit"
+            git -C "renderer-sources/$renderer_name" checkout --detach "$source_commit"
+            test "$(git -C "renderer-sources/$renderer_name" rev-parse HEAD)" = "$source_commit"
+          }
+
+          fluent_commit="$(node -p "require('./app/renderer-sources.json').sources.fluent.commit")"
+          noto_commit="$(node -p "require('./app/renderer-sources.json').sources.noto.commit")"
+          openmoji_commit="$(node -p "require('./app/renderer-sources.json').sources.openmoji.commit")"
+
+          fetch_sparse_source fluent https://github.com/microsoft/fluentui-emoji "$fluent_commit" \
+            /LICENSE '/assets/*/metadata.json' '/assets/*/Color/*.svg'
+          fetch_sparse_source noto https://github.com/googlefonts/noto-emoji "$noto_commit" \
+            /LICENSE '/svg/*.svg'
+          fetch_sparse_source openmoji https://github.com/hfg-gmuend/openmoji "$openmoji_commit" \
+            /LICENSE.txt '/color/svg/*.svg'
+
+      - name: Build and sign fail-closed renderer packs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p renderer-stage renderer-release
+          for renderer_name in fluent noto openmoji
+          do
+            node app/tools/prepare-renderer-pack.mjs \
+              --renderer "$renderer_name" \
+              --source "renderer-sources/$renderer_name" \
+              --output "renderer-stage/$renderer_name" \
+              --config app/renderer-sources.json \
+              --catalog app/node_modules/emojibase-data/en/data.json
+            (
+              cd "renderer-stage/$renderer_name"
+              zip -X -q -r "../../renderer-release/EmoShelf-${renderer_name}-1.0.0.emoshelf-renderer" \
+                manifest.json signature.ed25519 LICENSE.txt emoji
+            )
+          done
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: signed-renderer-packs
+          if-no-files-found: error
+          path: renderer-release/*.emoshelf-renderer
+
+  build-windows:
+    name: Sign and package Windows ${{ matrix.arch }} / ${{ matrix.bundle }}
+    needs: preflight
+    environment: production-signing
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: windows-latest
+            bundle: nsis
+            release_suffix: windows-x86_64
+          - arch: aarch64
+            runner: windows-11-arm
+            bundle: nsis
+            release_suffix: windows-aarch64
+          - arch: x86_64
+            runner: windows-latest
+            bundle: msi
+            release_suffix: windows-x86_64
+          - arch: aarch64
+            runner: windows-11-arm
+            bundle: msi
+            release_suffix: windows-aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    env:
+      EMOSHELF_UPDATER_PUBLIC_KEY: ${{ secrets.EMOSHELF_UPDATER_PUBLIC_KEY }}
+      EMOSHELF_RENDERER_KEY_ID: emoshelf-renderer-v1
+      EMOSHELF_RENDERER_PUBLIC_KEY_BASE64: ${{ secrets.EMOSHELF_RENDERER_PUBLIC_KEY_BASE64 }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.EMOSHELF_UPDATER_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.EMOSHELF_UPDATER_PRIVATE_KEY_PASSWORD }}
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri -> target
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Remove any cached, previously patched application binary
+        run: cargo clean --manifest-path src-tauri/Cargo.toml -p emoshelf
+
+      - run: pnpm tauri build --no-bundle --ci
+
+      - name: Embed the target installer type before Authenticode signing
+        run: pnpm tauri bundle --bundles ${{ matrix.bundle }} --ci --no-sign
+
+      - name: Stage the unsigned application executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path signing/app | Out-Null
+          Copy-Item src-tauri/target/release/emoshelf.exe signing/app/emoshelf.exe
+
+      - name: Upload unsigned application executable
+        id: upload-unsigned-app
+        uses: actions/upload-artifact@v7
+        with:
+          name: unsigned-app-${{ matrix.arch }}-${{ matrix.bundle }}
+          if-no-files-found: error
+          path: app/signing/app/emoshelf.exe
+
+      - name: Authenticode-sign application executable through SignPath
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ env.SIGNPATH_EXECUTABLE_ARTIFACT_CONFIGURATION }}
+          github-artifact-id: ${{ steps.upload-unsigned-app.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: app/signing/signed-app
+
+      - name: Verify and install the signed application executable
+        shell: pwsh
+        run: |
+          $signed = @(Get-ChildItem signing/signed-app -Recurse -Filter emoshelf.exe)
+          if ($signed.Count -ne 1) {
+            throw "Expected exactly one SignPath-signed application executable."
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $signed[0].FullName
+          if ($signature.Status -ne "Valid") {
+            throw "Application Authenticode status is $($signature.Status)."
+          }
+          Copy-Item -LiteralPath $signed[0].FullName -Destination src-tauri/target/release/emoshelf.exe -Force
+
+      - name: Bundle without mutating the signed application executable
+        shell: pwsh
+        run: |
+          $binary = "src-tauri/target/release/emoshelf.exe"
+          $before = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash
+          pnpm tauri bundle --bundles "${{ matrix.bundle }}" --ci --no-sign
+          if ($LASTEXITCODE -ne 0) { throw "Final Tauri bundle failed." }
+          $after = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash
+          if ($before -ne $after) {
+            throw "Tauri mutated the Authenticode-signed application executable during final bundling."
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $binary
+          if ($signature.Status -ne "Valid") {
+            throw "Bundled application Authenticode status is $($signature.Status)."
+          }
+
+      - name: Stage the unsigned installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path signing/installers | Out-Null
+          if ("${{ matrix.bundle }}" -eq "nsis") {
+            $installers = @(Get-ChildItem src-tauri/target/release/bundle/nsis -Filter *.exe)
+            $destination = "signing/installers/EmoShelf-setup.exe"
+          } else {
+            $installers = @(Get-ChildItem src-tauri/target/release/bundle/msi -Filter *.msi)
+            $destination = "signing/installers/EmoShelf.msi"
+          }
+          if ($installers.Count -ne 1) {
+            throw "Expected exactly one ${{ matrix.bundle }} installer."
+          }
+          Copy-Item -LiteralPath $installers[0].FullName -Destination $destination
+
+      - name: Upload unsigned installers
+        id: upload-unsigned-installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: unsigned-installer-${{ matrix.arch }}-${{ matrix.bundle }}
+          if-no-files-found: error
+          path: app/signing/installers/*
+
+      - name: Authenticode-sign installers through SignPath
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ env.SIGNPATH_INSTALLER_ARTIFACT_CONFIGURATION }}
+          github-artifact-id: ${{ steps.upload-unsigned-installers.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: app/signing/signed-installers
+
+      - name: Verify Authenticode and create the Tauri updater signature
+        shell: pwsh
+        run: |
+          if ("${{ matrix.bundle }}" -eq "nsis") {
+            $signed = @(Get-ChildItem signing/signed-installers -Recurse -Filter *.exe)
+            $output = "release/EmoShelf_1.0.0_${{ matrix.release_suffix }}-setup.exe"
+          } else {
+            $signed = @(Get-ChildItem signing/signed-installers -Recurse -Filter *.msi)
+            $output = "release/EmoShelf_1.0.0_${{ matrix.release_suffix }}.msi"
+          }
+          if ($signed.Count -ne 1) {
+            throw "Expected exactly one signed ${{ matrix.bundle }} installer."
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $signed[0].FullName
+          if ($signature.Status -ne "Valid") {
+            throw "$($signed[0].Name) Authenticode status is $($signature.Status)."
+          }
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          Copy-Item -LiteralPath $signed[0].FullName -Destination $output
+          pnpm tauri signer sign $output
+          if ($LASTEXITCODE -ne 0) {
+            throw "Tauri updater signing failed for ${{ matrix.bundle }}."
+          }
+
+      - name: Verify updater signatures independently with rsign2
+        shell: pwsh
+        run: |
+          cargo install rsign2 --locked --version 0.6.6
+          $publicKey = Join-Path $env:RUNNER_TEMP "emoshelf-updater.pub"
+          [IO.File]::WriteAllBytes(
+            $publicKey,
+            [Convert]::FromBase64String($env:EMOSHELF_UPDATER_PUBLIC_KEY)
+          )
+          Get-ChildItem release -File |
+            Where-Object { $_.Extension -in @(".exe", ".msi") } |
+            ForEach-Object {
+              $decodedSignature = "$($_.FullName).minisig"
+              [IO.File]::WriteAllBytes(
+                $decodedSignature,
+                [Convert]::FromBase64String(
+                  (Get-Content -LiteralPath "$($_.FullName).sig" -Raw).Trim()
+                )
+              )
+              rsign verify $_.FullName -x $decodedSignature -p $publicKey --quiet
+              if ($LASTEXITCODE -ne 0) {
+                throw "Updater signature verification failed for $($_.Name)."
+              }
+              Remove-Item -LiteralPath $decodedSignature -Force
+            }
+          Remove-Item -LiteralPath $publicKey -Force
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: signed-release-${{ matrix.arch }}-${{ matrix.bundle }}
+          if-no-files-found: error
+          path: app/release/*
+
+  installer-smoke:
+    name: Signed installer smoke (${{ matrix.arch }} / ${{ matrix.bundle }})
+    needs: build-windows
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: windows-latest
+            bundle: nsis
+          - arch: aarch64
+            runner: windows-11-arm
+            bundle: nsis
+          - arch: x86_64
+            runner: windows-latest
+            bundle: msi
+          - arch: aarch64
+            runner: windows-11-arm
+            bundle: msi
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: signed-release-${{ matrix.arch }}-${{ matrix.bundle }}
+          path: signed-release
+
+      - run: pnpm install --frozen-lockfile
+        working-directory: app
+      - run: cargo install tauri-driver --locked
+
+      - name: Add the runner's matching EdgeDriver to PATH
+        shell: pwsh
+        run: |
+          if (-not $env:EDGEWEBDRIVER) { throw "EDGEWEBDRIVER is unavailable." }
+          $env:EDGEWEBDRIVER | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Silent NSIS install, real-window E2E, and uninstall
+        if: matrix.bundle == 'nsis'
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem signed-release -Filter *.exe)
+          if ($installer.Count -ne 1) { throw "Expected one NSIS installer." }
+          $installerSignature = Get-AuthenticodeSignature -LiteralPath $installer[0].FullName
+          if ($installerSignature.Status -ne "Valid") {
+            throw "NSIS Authenticode status is $($installerSignature.Status)."
+          }
+          $installRoot = Join-Path $env:RUNNER_TEMP "EmoShelfNsis"
+          $process = Start-Process -FilePath $installer[0].FullName -ArgumentList "/S", "/D=$installRoot" -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "NSIS install failed: $($process.ExitCode)" }
+          $appBinary = Join-Path $installRoot "emoshelf.exe"
+          if (-not (Test-Path -LiteralPath $appBinary)) { throw "Installed app is missing." }
+          $appSignature = Get-AuthenticodeSignature -LiteralPath $appBinary
+          if ($appSignature.Status -ne "Valid") {
+            throw "NSIS-installed application Authenticode status is $($appSignature.Status)."
+          }
+          $env:EMOSHELF_E2E_BINARY = $appBinary
+          $env:EMOSHELF_E2E_SKIP_BUILD = "1"
+          pnpm --dir app test:e2e
+          if ($LASTEXITCODE -ne 0) { throw "Installed NSIS app E2E failed." }
+          Stop-Process -Name emoshelf -Force -ErrorAction SilentlyContinue
+          $uninstaller = Join-Path $installRoot "uninstall.exe"
+          $uninstall = Start-Process -FilePath $uninstaller -ArgumentList "/S" -PassThru -Wait
+          if ($uninstall.ExitCode -ne 0) { throw "NSIS uninstall failed: $($uninstall.ExitCode)" }
+
+      - name: Silent MSI install, real-window E2E, and uninstall
+        if: matrix.bundle == 'msi'
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem signed-release -Filter *.msi)
+          if ($installer.Count -ne 1) { throw "Expected one MSI installer." }
+          $installerSignature = Get-AuthenticodeSignature -LiteralPath $installer[0].FullName
+          if ($installerSignature.Status -ne "Valid") {
+            throw "MSI Authenticode status is $($installerSignature.Status)."
+          }
+          $installRoot = Join-Path $env:RUNNER_TEMP "EmoShelfMsi"
+          $installArgs = "/i `"$($installer[0].FullName)`" INSTALLDIR=`"$installRoot`" /qn /norestart"
+          $process = Start-Process msiexec.exe -ArgumentList $installArgs -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "MSI install failed: $($process.ExitCode)" }
+          $appBinary = Get-ChildItem $installRoot -Recurse -Filter emoshelf.exe | Select-Object -First 1
+          if (-not $appBinary) { throw "MSI-installed app is missing." }
+          $appSignature = Get-AuthenticodeSignature -LiteralPath $appBinary.FullName
+          if ($appSignature.Status -ne "Valid") {
+            throw "MSI-installed application Authenticode status is $($appSignature.Status)."
+          }
+          $env:EMOSHELF_E2E_BINARY = $appBinary.FullName
+          $env:EMOSHELF_E2E_SKIP_BUILD = "1"
+          pnpm --dir app test:e2e
+          if ($LASTEXITCODE -ne 0) { throw "Installed MSI app E2E failed." }
+          Stop-Process -Name emoshelf -Force -ErrorAction SilentlyContinue
+          $uninstallArgs = "/x `"$($installer[0].FullName)`" /qn /norestart"
+          $uninstall = Start-Process msiexec.exe -ArgumentList $uninstallArgs -PassThru -Wait
+          if ($uninstall.ExitCode -ne 0) { throw "MSI uninstall failed: $($uninstall.ExitCode)" }
+
+  publish:
+    name: Publish signed v1.0.0
+    needs: [renderer-packs, build-windows, installer-smoke]
+    runs-on: ubuntu-latest
+    environment: production-signing
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: signed-release-*
+          merge-multiple: true
+          path: release
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: signed-renderer-packs
+          path: release
+
+      - name: Generate signed updater manifest and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --dir app release:latest-json -- \
+            --version "${{ inputs.version }}" \
+            --notes-file ../RELEASE_NOTES.md \
+            --base-url "https://github.com/ELRdn/EmoShelf/releases/download/v${{ inputs.version }}" \
+            --x64-file ../release/EmoShelf_1.0.0_windows-x86_64-setup.exe \
+            --arm64-file ../release/EmoShelf_1.0.0_windows-aarch64-setup.exe \
+            --output ../release/latest.json
+          pnpm --dir app release:checksums -- \
+            --directory ../release \
+            --output ../release/SHA256SUMS.txt
+
+      - name: Publish only the verified signed artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find release -maxdepth 1 -name '*.exe' | wc -l)" -eq 2
+          test "$(find release -maxdepth 1 -name '*.msi' | wc -l)" -eq 2
+          test "$(find release -maxdepth 1 -name '*.emoshelf-renderer' | wc -l)" -eq 3
+          gh release create "v${{ inputs.version }}" release/* \
+            --target "$GITHUB_SHA" \
+            --title "EmoShelf v${{ inputs.version }}" \
+            --notes-file RELEASE_NOTES.md \
+            --latest
+
+      - name: Verify the public updater endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          endpoint="https://github.com/ELRdn/EmoShelf/releases/latest/download/latest.json"
+          for attempt in {1..12}
+          do
+            if curl --fail --silent --show-error --location "$endpoint" -o public-latest.json; then
+              node -e '
+                const value = require("./public-latest.json");
+                if (value.version !== "1.0.0") process.exit(1);
+                for (const key of ["windows-x86_64", "windows-aarch64"]) {
+                  if (!value.platforms?.[key]?.url || !value.platforms?.[key]?.signature) process.exit(1);
+                }
+              '
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::The public latest.json endpoint did not become available."
+          exit 1

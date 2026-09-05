@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ELRdn/EmoShelf/security/advisories/new
+    about: Report security issues privately. Do not publish exploit details.
+  - name: Support and discussion
+    url: https://github.com/ELRdn/EmoShelf/issues
+    about: Search existing issues before opening a new report.

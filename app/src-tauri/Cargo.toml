@@ -1,8 +1,8 @@
 [package]
 name = "emoshelf"
-version = "0.5.0"
+version = "1.0.0"
 description = "Your personal emoji shelf."
-authors = ["EmoShelf Contributors"]
+authors = ["ELRdn + Contributors"]
 edition = "2021"
 license = "Apache-2.0"
 
@@ -14,6 +14,11 @@ license = "Apache-2.0"
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "emoshelf_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+default = []
+# WebDriverIOの実Tauri E2E専用。正式ビルドには含めない。
+wdio = ["dep:tauri-plugin-wdio", "dep:tauri-plugin-wdio-webdriver"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -45,6 +50,8 @@ resvg = { version = "0.48.1", default-features = false }
 ed25519-dalek = "2.2"
 semver = "1"
 tauri-plugin-updater = "2"
+tauri-plugin-wdio = { version = "1", optional = true }
+tauri-plugin-wdio-webdriver = { version = "1", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-core = "0.61"

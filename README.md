@@ -1,349 +1,92 @@
 # EmoShelf
 
-> **Your personal emoji shelf.**
+<p align="center">
+  <img src="./images/brand/emoshelf-icon-master.png" width="160" height="160" alt="EmoShelf — sunglasses face behind a purple shelf">
+</p>
 
-EmoShelf is a free and open-source desktop app for keeping the emojis you actually use within instant reach.
+<p align="center"><strong>Your personal emoji shelf.</strong></p>
 
-Instead of opening a giant emoji catalog every time, EmoShelf lets you build your own Boards, arrange your favorite emojis, and paste them anywhere with a single click.
+EmoShelf is a fast, local-first Windows app for keeping the emojis, sequences, symbols, and custom images you actually use within instant reach.
 
-**Stop searching. Start reaching.**
+Press <kbd>Alt</kbd> + <kbd>E</kbd>, choose from your Board, and paste. No account, cloud sync, telemetry, or remote profile is required.
 
----
+![EmoShelf v1.0 Shelf](./images/screenshots/emoshelf-v1-shelf.png)
 
-## Why EmoShelf?
+## What it does
 
-Operating-system emoji pickers are useful when you need to *find* an emoji.
+- Personal Boards with drag-and-drop ordering, safe delete/undo, and app-specific mapping
+- Search across 1,949 emoji with English and Japanese names and tags
+- Twemoji and native rendering, plus separately signed Fluent, Noto, and OpenMoji packs
+- Single emoji paste, multi-emoji Compose Tray, reusable sequences, and copy-only fallback
+- PNG, WebP, and sanitized SVG import with content-addressed local storage
+- `.emoshelf` backup, preview, merge, and replace workflows
+- Global shortcut, Quick/Pinned modes, system tray, autostart, monitor-aware placement, and single instance
+- Dark, light, and system themes with keyboard navigation, visible focus, high-contrast support, and Reduced Motion
+- User-approved, signature-verified updates
 
-But most of the time, you already know which emojis you use.
-
-EmoShelf is designed around a different idea:
-
-> **Emoji Pickerではなく、Personal Emoji Shelf。**  
-> 探すためのアプリではなく、自分が使う絵文字を置いておくアプリ。
-
-Your Shelf becomes the home screen. Search is still there when you need it, but it is no longer the main workflow.
-
----
-
-## Core experience
-
-```text
-Global shortcut
-      ↓
-Open EmoShelf
-      ↓
-Choose from your Board
-      ↓
-Click emoji
-      ↓
-Paste
-      ↓
-Close
-```
-
-The default interaction is intentionally simple:
-
-**Hotkey → Click → Paste → Close**
-
----
-
-## Features
-
-### Personal Boards
-
-Create simple, flat Boards for different contexts.
-
-Examples:
-
-- ⭐ My Shelf
-- 😂 Reactions
-- 💻 Dev
-- 🎨 Design
-- 📱 Social
-
-Add emojis to a Board, enter Edit mode, and drag them into the order that makes sense to you.
-
-### Shelf-first Home
-
-On the first launch, EmoShelf opens the full emoji catalog as part of onboarding.
-
-You choose a few emojis you use often, and EmoShelf creates your first Shelf.
-
-From the second launch onward, your personal Boards become Home.
-
-### Fast global popup
-
-Open EmoShelf from anywhere using a global shortcut.
-
-Default:
+## Fast path
 
 ```text
-Alt + E
+Alt + E → Board → emoji → target application
 ```
 
-The shortcut will be configurable.
+Keyboard controls:
 
-### One-click paste
+| Key | Action |
+| --- | --- |
+| `Ctrl+F` | Focus search |
+| Arrow keys | Move through items |
+| `Enter` | Paste |
+| `Ctrl+Enter` | Keep open when pasting, or add a search result to the active Board |
+| `Ctrl+K` | Open item actions |
+| `Ctrl+1..9` | Switch Board |
+| `Esc` | Close dialog, clear search, then hide EmoShelf |
 
-By default:
+## Install
 
-```text
-Click → Paste → Close
+Official builds target Windows 11 on x64 and ARM64. After the external signing gates are complete, signed installers and checksums are published on [GitHub Releases](https://github.com/ELRdn/EmoShelf/releases).
+
+Formal `v1.0.0` artifacts are released only after SignPath Foundation approval, Authenticode verification, updater-signature verification, and installer smoke tests. Do not redistribute an unsigned CI artifact as an official release.
+
+## Privacy and security
+
+EmoShelf is local-first and does not include analytics. Optional app-aware Boards use only the foreground executable basename and monitor identifier; full paths and window titles are neither saved nor sent anywhere.
+
+- [Privacy](./PRIVACY.md)
+- [Security policy](./SECURITY.md)
+- [Code-signing policy](./CODE_SIGNING_POLICY.md)
+- [Third-party notices](./THIRD_PARTY_NOTICES.md)
+
+## Development
+
+Requirements: Node.js 22+, pnpm 10+, stable Rust, WebView2, and the [Tauri Windows prerequisites](https://v2.tauri.app/start/prerequisites/).
+
+```powershell
+cd app
+pnpm install --frozen-lockfile
+pnpm check
+pnpm build
+pnpm release:audit
+
+cd src-tauri
+cargo fmt --check
+cargo clippy --locked -- -D warnings
+cargo test --locked
+cargo check --locked
 ```
 
-Alternative selection behaviors are planned:
+Run the desktop app with `pnpm tauri dev`. Real-window E2E uses WebDriverIO and `tauri-driver`; see [app/README.md](./app/README.md).
 
-- Paste and close
-- Paste and keep open
-- Copy only
+## Project guide
 
-### Twemoji by default
+- [Design specification](./DESIGN.md)
+- [Roadmap and acceptance status](./ROADMAP.md)
+- [Contributor guide](./CONTRIBUTING.md)
+- [v1.0 release notes](./RELEASE_NOTES.md)
+- [Engineering handoff](./HANDOFF.md)
 
-EmoShelf separates the emoji **payload** from the emoji **renderer**.
-
-For example:
-
-```text
-Rendered appearance: Twemoji
-Copied payload:      😭
-Unicode:             U+1F62D
-```
-
-Changing the renderer does not change the Unicode copied to the target app.
-
-Planned renderer choices:
-
-- Twemoji — default
-- Fluent Emoji
-- Noto Emoji
-- OpenMoji
-- Native / system renderer
-
-> Renderer availability and bundled assets are subject to their respective licenses and attribution requirements.
-
-### Search when you need it
-
-Search is a utility, not the product homepage.
-
-Search results switch from the Board grid into a keyboard-friendly result list.
-
-Planned actions:
-
-- `Enter` — Paste
-- `Ctrl + Enter` — Add to Shelf
-- `Ctrl + K` — Actions
-
-### Quick and pinned workflows
-
-EmoShelf is designed for both fast one-off pastes and repeated use.
-
-- **Quick mode** — paste one emoji and close
-- **Pinned mode** — keep EmoShelf open while you work
-
-### Local-first
-
-EmoShelf should work without an account.
-
-Core user data stays on the device:
-
-- Boards
-- Board order
-- Emoji order
-- Recent emojis
-- Preferences
-- Window size
-- Shortcut settings
-
-Cloud sync is intentionally not required for the core experience.
-
----
-
-## Design direction
-
-### Discord warmth × Raycast precision
-
-EmoShelf combines:
-
-- colorful, friendly emoji presentation
-- compact utility-app density
-- keyboard-first navigation
-- subtle dark surfaces
-- small, intentional motion
-- minimal UI chrome
-
-The emoji should always be more visually important than the surrounding interface.
-
-> **Emoji first. Chrome second.**
-
-See [`DESIGN.md`](./DESIGN.md) for the full interface specification.
-
----
-
-## Product principles
-
-1. **Shelf first**  
-   Your Boards are the product. The catalog is secondary.
-
-2. **One emoji, one click**  
-   The common action should require as little friction as possible.
-
-3. **Keyboard-first, mouse-friendly**  
-   Fast shortcuts without making mouse use awkward.
-
-4. **Local-first**  
-   No account should be required to use the core product.
-
-5. **Appearance independent**  
-   Rendering style and copied Unicode are separate concerns.
-
-6. **Stay lightweight**  
-   EmoShelf should remain a focused desktop utility.
-
-7. **Free and open source**  
-   The essential emoji-shelf experience should not live behind a paywall.
-
----
-
-## Onboarding
-
-First launch:
-
-```text
-Welcome
-   ↓
-Browse full emoji catalog
-   ↓
-Pick emojis you use often
-   ↓
-Create "My Shelf"
-   ↓
-Learn Alt + E
-   ↓
-Open your Shelf
-```
-
-Second launch and later:
-
-```text
-My Shelf
-```
-
-The onboarding itself teaches the product's main mental model: **put emojis on your Shelf instead of searching for them every time.**
-
----
-
-## Current architecture
-
-EmoShelf is planned as a Windows-first desktop app.
-
-```text
-Tauri 2
-├── React
-├── TypeScript
-├── Rust
-│
-├── Global Shortcut
-├── Clipboard / Paste integration
-├── System Tray
-├── Start with Windows
-├── Local persistence
-└── Privacy-safe foreground app / monitor integration
-```
-
-The project should stay small enough to feel native and open quickly.
-
-### Performance target
-
-A long-term interaction target is:
-
-> **Global hotkey → visible popup in under 100 ms where practical.**
-
-This is a product goal, not yet a guaranteed benchmark.
-
----
-
-## Initial scope
-
-The first usable release focuses on:
-
-- Windows
-- Global shortcut
-- Twemoji rendering
-- Emoji catalog
-- Search
-- Recent emojis
-- Custom Boards
-- Add to Shelf
-- Board editing
-- Drag-and-drop reordering
-- One-click paste
-- Quick / pinned behavior
-- Local persistence
-- Dark / light appearance
-
-Not in the first release:
-
-- Custom image emojis
-- Sticker management
-- Cloud sync
-- Accounts
-- Social/community features
-- AI features
-- Nested folders
-
-See [`ROADMAP.md`](./ROADMAP.md).
-
----
-
-## Project status
-
-**Status: Planning / pre-alpha**
-
-The product direction, core interaction model, onboarding, visual direction, and MVP scope are currently defined.
-
-Implementation has not yet reached a stable public release.
-
----
-
-## Contributing
-
-EmoShelf is intended to be an open-source project.
-
-Contribution guidelines will be added once the initial application structure and coding conventions are stable.
-
-Potential contribution areas include:
-
-- accessibility
-- keyboard navigation
-- emoji metadata / search
-- renderer integrations
-- Windows behavior
-- localization
-- performance
-- packaging
-
----
+Publisher: **ELRdn + Contributors**. Support and product feedback are handled through [GitHub Issues](https://github.com/ELRdn/EmoShelf/issues).
 
 ## License
 
-The application license will be finalized before the first public release.
-
-Third-party emoji artwork and libraries may use separate licenses and attribution requirements. These must be documented clearly before distribution.
-
----
-
-## Acknowledgements
-
-EmoShelf is inspired by the speed and polish of modern launcher-style utilities and by the friendliness of contemporary emoji experiences.
-
-It is not intended to clone another product's interface. The goal is to build a distinct **Personal Emoji Shelf** workflow around open, local-first desktop software.
-
----
-
-## Roadmap
-
-See [`ROADMAP.md`](./ROADMAP.md).
-
-## Design
-
-See [`DESIGN.md`](./DESIGN.md).
+EmoShelf application code is licensed under [Apache License 2.0](./LICENSE). Emoji artwork and third-party components remain under their respective licenses.

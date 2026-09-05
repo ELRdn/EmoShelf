@@ -1,39 +1,54 @@
-# Third-party notices
+# Third-Party Notices
 
-EmoShelf includes or depends on the following third-party works. This file is
-provided for attribution and does not change the license of EmoShelf itself.
+EmoShelf application code is Apache-2.0. The following works are bundled, used at runtime, or offered as separately signed renderer packs under their own terms.
 
-## Twemoji graphics
+## Emoji artwork and metadata
+
+### Twemoji
 
 - Project: [jdecked/twemoji](https://github.com/jdecked/twemoji)
-- Copyright: Twitter, Inc. and other contributors
-- License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+- Artwork license: Creative Commons Attribution 4.0 International (CC BY 4.0)
+- Attribution: “Twemoji graphics licensed under CC-BY 4.0”
 
-EmoShelf distributes Twemoji SVG graphics locally so emoji rendering does not
-require a network connection. The Unicode text copied or pasted by EmoShelf is
-independent from these graphics.
+Twemoji SVG artwork is the default bundled renderer. The optimized `@twemoji/svg` packaging code is MIT licensed; that package does not replace the artwork's CC BY 4.0 terms.
 
-## @twemoji/svg package
+### Emojibase
 
-- Package: `@twemoji/svg`
-- Copyright: 2023 Samuel Kopp
+- Project: [milesj/emojibase](https://github.com/milesj/emojibase)
 - License: MIT
 
-The complete dependency license inventory will be regenerated and audited for
-the v1.0 release package.
+Emojibase and emojibase-data provide Unicode emoji metadata, English/Japanese labels, tags, and search data.
 
-## Optional renderer packs (not bundled in v0.4)
+## Optional signed renderer packs
 
-The application can install the following renderers through its signed
-Renderer Pack system. Their artwork is not distributed in the v0.4 application
-package and remains unavailable until a compatible pack signed by the trusted
-EmoShelf renderer key is installed and enabled.
+Renderer packs are separate GitHub Release assets and are not part of the core installer. Every pack contains its own `LICENSE.txt` and a manifest with source commit, attribution, hashes, compatibility range, and signing-key ID.
 
-- Fluent Emoji graphics — Microsoft, MIT License
-- Noto Emoji SVG/image resources — Google, Apache License 2.0; the font files
-  use the SIL Open Font License 1.1
-- OpenMoji graphics — OpenMoji contributors, CC BY-SA 4.0; related code uses
-  LGPL-3.0
+| Pack | Upstream | Artwork license | Pinned source |
+| --- | --- | --- | --- |
+| Fluent Emoji Color | [microsoft/fluentui-emoji](https://github.com/microsoft/fluentui-emoji) | MIT | `1ffb34c752ecf5d402f04cfb4b392c77f57c54bc` |
+| Noto Color Emoji | [googlefonts/noto-emoji](https://github.com/googlefonts/noto-emoji) | Apache-2.0 | `8998f5dd683424a73e2314a8c1f1e359c19e8742` |
+| OpenMoji Color | [hfg-gmuend/openmoji](https://github.com/hfg-gmuend/openmoji) | CC BY-SA 4.0 | `aeb8bb3a59e2de39c754ac79180c8131c906acea` |
 
-Each pack must carry its exact upstream license and attribution files. EmoShelf
-shows that metadata in the renderer settings before the pack can be used.
+OpenMoji adaptations in an EmoShelf renderer pack remain under CC BY-SA 4.0. The pack generation process only normalizes safe SVG presentation attributes and file names; it preserves attribution and distributes the upstream license.
+
+## Application libraries
+
+The shipped application uses:
+
+- React and React DOM — MIT
+- Tauri and official Tauri plugins — Apache-2.0 OR MIT
+- dnd-kit — MIT
+- TanStack Virtual — MIT
+- Zustand — MIT
+- Zod — MIT
+- Rust Serde, image, zip, sha2, semver, Ed25519, Windows bindings, resvg, and their transitive dependencies under the licenses declared by the locked crates
+
+Exact JavaScript and Rust versions are reproducibly recorded in `app/pnpm-lock.yaml` and `app/src-tauri/Cargo.lock`. Release builds use frozen/locked installation and the source repository includes the corresponding application license.
+
+## Brand artwork
+
+The EmoShelf sunglasses-face-and-purple-shelf application icon was created specifically for EmoShelf from the project's own design reference, without modifying or redistributing the reference image as the output asset. It is distributed with the application under Apache-2.0.
+
+## No implied endorsement
+
+Use of a project name identifies the upstream work and license. It does not imply that Microsoft, Google, HfG Schwäbisch Gmünd, the Twemoji maintainers, or other dependency authors endorse EmoShelf.
