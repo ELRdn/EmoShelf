@@ -1,7 +1,7 @@
 {
   "name": "emoshelf",
   "private": true,
-  "version": "0.5.0",
+  "version": "1.0.0",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
@@ -9,12 +9,17 @@
     "build": "tsc && vite build && node tools/check-bundle-size.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "vitest run",
+    "test": "vitest run && node --test tools/*.node-test.mjs",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "check": "tsc --noEmit && biome check . && vitest run"
+    "check": "tsc --noEmit && biome check . && vitest run && node --test tools/*.node-test.mjs",
+    "test:e2e": "wdio run e2e/wdio.conf.mjs",
+    "release:audit": "node tools/release-audit.mjs",
+    "release:latest-json": "node tools/release-manifest.mjs latest-json",
+    "release:checksums": "node tools/release-manifest.mjs checksums",
+    "renderer:prepare": "node tools/prepare-renderer-pack.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -44,6 +49,10 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "@wdio/cli": "^9.31.0",
+    "@wdio/local-runner": "^9.31.0",
+    "@wdio/mocha-framework": "^9.31.0",
+    "@wdio/spec-reporter": "^9.31.0",
     "axe-core": "^4.11.0",
     "jsdom": "^30.0.1",
     "typescript": "~5.8.3",

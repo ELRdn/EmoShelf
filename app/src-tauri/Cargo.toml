@@ -1,8 +1,8 @@
 [package]
 name = "emoshelf"
-version = "0.5.0"
+version = "1.0.0"
 description = "Your personal emoji shelf."
-authors = ["EmoShelf Contributors"]
+authors = ["ELRdn + Contributors"]
 edition = "2021"
 license = "Apache-2.0"
 

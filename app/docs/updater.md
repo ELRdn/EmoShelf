@@ -30,3 +30,9 @@ CSPもTauri IPC、同梱ローカルアセット、同endpointに限定する。
 - 正式版は署名済みのWindows成果物とTauri Updater署名を検証してから公開する。
 - `latest.json`は署名済みUpdater成果物のURL、署名、バージョン、公開日時を持つ。
 - SignPath承認前にRCが必要な場合だけ、未署名であることを明示し正式版と分離する。
+
+正式ワークフローは、未バンドルEXE生成、NSIS／MSI種別の事前埋め込み、SignPathでのEXE署名、
+署名後EXEを変更しないNSIS／MSI生成、インストーラー署名、Tauri updater署名、
+`latest.json`生成の順で実行する。公開前に
+Authenticode、Tauri署名、SHA-256、サイレントインストール／起動／アンインストールを
+x64とARM64で独立検証する。具体的な手動ゲートは[`release.md`](release.md)を正本とする。

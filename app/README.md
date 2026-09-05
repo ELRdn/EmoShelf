@@ -8,7 +8,8 @@ Concept 2.5準拠のShelf UI、Compose Tray、sequence、キーボード操作�
 `.emoshelf` Import/Export、アプリ別Board、Frequent、Tray、Autostart、
 カスタム画像、署名付きRenderer Pack管理まで実装済みです。
 v0.5では復旧通知、設定バックアップ、明示同意型Updater、アクセシビリティ監査、
-性能診断、500KiB JavaScript bundle gateも追加しています。
+性能診断、500KiB JavaScript bundle gateも追加しました。v1.0 Release Candidateでは正式アイコン、
+実Tauri E2E、署名済みx64／ARM64配布パイプライン、Renderer Pack生成・署名検証、公開文書を整備しています。
 
 ## 前提ツール
 
@@ -26,12 +27,14 @@ Tauri 公式の前提条件: https://tauri.app/start/prerequisites/
 ```sh
 cd app
 
-pnpm install     # 依存インストール
+pnpm install --frozen-lockfile # lockfile固定で依存インストール
 pnpm dev         # Vite のみ起動（UI 確認用）
 pnpm tauri dev   # デスクトップアプリとして起動
-pnpm check       # 型チェック + Biome + Vitest（48件）
-pnpm test        # Vitest / React Testing Library / axe のみ実行
+pnpm check       # 型チェック + Biome + Vitest/RTL/axe + Node release tests
+pnpm test        # Vitest/RTL/axe + Node release tests
 pnpm build       # 本番フロントビルド
+pnpm test:e2e    # 実Tauri/WebView2をWebDriverIOで検証
+pnpm release:audit # バージョン・文書・CI・鍵混入・追跡生成物を監査
 pnpm tauri build # Windows インストーラー（NSIS / MSI）を生成
 ```
 
@@ -73,7 +76,7 @@ app/
 │   ├── src/renderer_packs.rs # 署名・hash・互換性検証とPack管理
 │   ├── tauri.conf.json  # カスタムフレーム・ウィンドウ・バンドル設定
 │   ├── capabilities/    # 権限設定
-│   └── icons/           # 仮アイコン（正式アイコンは v1.0 で差し替え）
+│   └── icons/           # 正式アイコン一式（PNG / ICO / ICNS / Windows tiles）
 ├── biome.json         # 整形 / lint 設定
 └── .npmrc             # esbuild の postinstall スキップ設定
 ```
@@ -133,6 +136,10 @@ Autostart時はウィンドウを出さずTrayで待機する。Trayの左クリ
 - `state.json`と`.bak`が両方壊れている場合は読み取り専用へ移行し、空状態で上書きしない。
 - Updaterの同意・鍵・公開条件は[`docs/updater.md`](docs/updater.md)を参照。
 - 正式Updaterを有効にする場合だけ、公開鍵をコンパイル時に設定する。
+
+実Tauri E2Eには`tauri-driver`と、端末のWebView2／Edgeと同じメジャーバージョンの
+`msedgedriver`が必要です。CIはx64と`windows-11-arm`の両方で同じE2Eを実行します。
+署名済み公開手順と外部ゲートは[`docs/release.md`](docs/release.md)を参照してください。
 
 ```text
 EMOSHELF_UPDATER_PUBLIC_KEY

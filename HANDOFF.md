@@ -1,6 +1,6 @@
 # EmoShelf 引き継ぎ書
 
-> 最終更新: 2026-09-05（基礎構築: DSH / Scarlet 🦊、Phase 0〜v0.5: Cyan/Codex）
+> 最終更新: 2026-09-05（基礎構築: DSH / Scarlet 🦊、Phase 0〜v1.0 Release Candidate: Cyan/Codex）
 > このファイルは他エージェントへの引き継ぎ用。作業開始前にここから読むこと。
 
 ## 0. 読み順（5分コース）
@@ -61,6 +61,14 @@
   - 絵文字データを静的JSONへ分離し、全JavaScript chunkを500KiB以下にするbuild gate
   - 起動→操作可能、検索p95、ホットキー表示要求p95、JavaScript heapのローカル診断
   - Windows表示は`ShowWindowAsync`へ切り替え、WebView2 UI thread待ちをショートカット経路から除外
+- **v1.0 Release Candidate**:
+  - サングラス顔＋紫の棚を正式アイコンへ再構成し、Tauri／Windowsアイコン一式とfaviconを生成
+  - README、Privacy、Attributions、Contributing、Security／署名方針、Issue導線、Release Notesを整備
+  - 実Tauri/WebView2 E2Eをx64／ARM64 CIへ追加し、ローカルでは3シナリオ通過と製品スクリーンショットを確認
+  - Fluent 1,285件、Noto 1,687件、OpenMoji 1,949件を公式固定commitから安全にPack化し、
+    Ed25519署名の自己検証まで実データで確認
+  - SignPathによるEXE→NSIS/MSIの段階署名、Tauri updater署名、`latest.json`、checksums、
+    x64／ARM64サイレント導入試験をfail-closedの手動Release workflowへ実装
 - **v0.1 データ層**:
   - Rust: `load_state` / `save_state`（アトミック保存・`.bak` 復旧）/
     `set_global_shortcut` / `paste_payload`（クリップボード→非表示→Ctrl+V）
@@ -77,14 +85,15 @@
   `Alt+E`、単一起動を確認。ExplorerへのOLE実ドロップはComputer Useのウィンドウ境界制約で未受入
 - **v0.5実機計測**: 起動→操作可能77.5ms、JS heap 6.4MiB、非同期ホットキー表示要求0.1ms。
   再起動後のホットキーsampleは1件のため、10件以上のp95証跡はv1.0手動ゲートへ継続
-- `ROADMAP.md` のPhase 0〜v0.5チェックボックスは受け入れ結果へ同期済み
+- `ROADMAP.md` のPhase 0〜v1.0チェックボックスは受け入れ結果へ同期済み
 
 ### 次の作業
 
-- v0.4残件: Explorer／画像対応アプリへのOLE実ドロップを手動またはウィンドウ間操作可能な環境で確認
+- PRの全CI成功後、v1.0 Release Candidateを`main`へマージする
+- v0.4残件: Explorer／画像対応アプリへのOLE実ドロップを、同一ユーザーデスクトップ上で手動確認
 - v0.5残件: Narrator、大文字、125%／150%／200%、高DPI、120/144Hz以上、ホットキー10 sample p95
-- v1.0: 正式アイコン、公開文書、CI/E2E/配布監査、x64／ARM64署名済みリリース
-- SignPath Foundationの本人確認・MFA・申請承認とprivate→public変更はユーザー操作を伴う外部ゲート
+- SignPath Foundationの本人確認・MFA・申請承認、鍵／GitHub Secrets設定、private→public変更、
+  `production-signing`承認後に限り、署名済み`v1.0.0` workflowを実行する
 
 ## 3. 主要ファイル
 
@@ -93,8 +102,9 @@
 ├── README.md / DESIGN.md / ROADMAP.md  # 製品・設計・計画（正本）
 ├── LICENSE                             # Apache-2.0
 ├── HANDOFF.md                          # このファイル
-├── images/                             # デザイン参考画（3枚、触らない）
-├── .github/workflows/ci.yml            # CI（フロント検証＋Rust検証＋Win実パッケージ）
+├── images/                             # 参照画、正式ブランドmaster、実アプリスクリーンショット
+├── .github/workflows/                  # CIと署名済みRelease workflow
+├── .signpath/                          # SignPathポリシー（秘密情報なし）
 └── app/                                # アプリ本体
     ├── package.json                    # scripts: dev/build/check/lint/format/typecheck/tauri
     ├── biome.json                      # 整形・lint（Biome 2.x、推奨プリセット）
@@ -123,15 +133,17 @@
         ├── src/lib.rs                  # Rust 基盤（コマンド登録・Windows統合）
         ├── src/custom_assets.rs        # 画像検証・正規化・content-addressed保存
         ├── src/renderer_packs.rs       # 署名付きPack検証・管理
-        └── icons/                      # テンプレ既定の仮アイコン
+        └── icons/                      # 正式Tauri／Windowsアイコン一式
 ```
 
 ## 4. コマンド（`app/` で実行）
 
 ```sh
-pnpm install     # 依存インストール
-pnpm check       # 型チェック ＋ Biome ＋ Vitest（基本はこれ）
+pnpm install --frozen-lockfile
+pnpm check       # 型チェック ＋ Biome ＋ Vitest/RTL/axe ＋ Node release tests
 pnpm build       # 本番フロントビルド
+pnpm test:e2e    # 実Tauri/WebView2（tauri-driver + matching EdgeDriver）
+pnpm release:audit
 pnpm tauri dev   # アプリ起動
 pnpm tauri build # NSIS / MSI 生成
 ```
@@ -159,7 +171,8 @@ cargo check --locked
 4. **Codex サンドボックスでは Cargo のネットワーク接続が失敗する場合がある**:
    Windows TLS の `SEC_E_NO_CREDENTIALS` が出た場合はプロジェクトのコンパイルエラーと分け、
    通常ターミナル・CI、または依存取得後の `--offline` で検証する。
-5. **`images/` は触らない**: デザイン参考画。v0.1 の UI 実装時に参照する。
+5. **`images/`の参照画は保全**: 元のデザイン参考画は変更しない。正式生成物は`images/brand/`、
+   実アプリ証跡は`images/screenshots/`へ分離する。
 6. **npm/pnpm のキャッシュ・ストア**: サンドボックスでは `AppData\Local` 直下への
    書き込みが EPERM になる。回避には `$env:TEMP` 配下へのリダイレクト
    （`XDG_CACHE_HOME`、`--store-dir`）を使うこと。通常環境では不要。
@@ -175,6 +188,9 @@ cargo check --locked
     pluginを登録する。秘密鍵はリポジトリへ置かず、Renderer Pack鍵とも分離する。
 11. **v0.5手動アクセシビリティ残件**: axeとキーボード自動テストは通過済みだが、Narrator、
     125%／150%／200%、大文字、120/144Hz以上は端末設定の復元証跡を伴うため未受入。
+12. **GUI実機ゲート**: Codexサンドボックスから起動したGUIはComputer Useのユーザーデスクトップと
+    分離される場合がある。実Tauri E2Eの成功を手動操作の代用にせず、署名済みインストール版を
+    ユーザー側デスクトップで起動して`app/docs/release.md`の手順を完了する。
 
 ## 6. 決定事項（覆す場合は記録を残すこと）
 

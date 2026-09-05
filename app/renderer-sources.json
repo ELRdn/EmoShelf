@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "packVersion": "1.0.0",
+  "keyId": "emoshelf-renderer-v1",
+  "minAppVersion": "1.0.0",
+  "maxAppVersionExclusive": "2.0.0",
+  "sources": {
+    "fluent": {
+      "repository": "https://github.com/microsoft/fluentui-emoji",
+      "commit": "1ffb34c752ecf5d402f04cfb4b392c77f57c54bc",
+      "displayName": "Fluent Emoji Color",
+      "attribution": "Fluent Emoji artwork by Microsoft, distributed under the MIT License.",
+      "licenseName": "MIT",
+      "licensePath": "LICENSE",
+      "minimumCoverage": 1200
+    },
+    "noto": {
+      "repository": "https://github.com/googlefonts/noto-emoji",
+      "commit": "8998f5dd683424a73e2314a8c1f1e359c19e8742",
+      "displayName": "Noto Color Emoji",
+      "attribution": "Noto Emoji artwork by Google, distributed under the Apache License 2.0.",
+      "licenseName": "Apache-2.0",
+      "licensePath": "LICENSE",
+      "minimumCoverage": 1200
+    },
+    "openmoji": {
+      "repository": "https://github.com/hfg-gmuend/openmoji",
+      "commit": "aeb8bb3a59e2de39c754ac79180c8131c906acea",
+      "displayName": "OpenMoji Color",
+      "attribution": "OpenMoji artwork by HfG Schwäbisch Gmünd contributors, CC BY-SA 4.0.",
+      "licenseName": "CC-BY-SA-4.0",
+      "licensePath": "LICENSE.txt",
+      "minimumCoverage": 1200
+    }
+  }
+}

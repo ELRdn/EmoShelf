@@ -455,22 +455,27 @@ v1.0手動ゲートへ残す。Narrator、125%／150%／200%、大文字、高DP
 - [ ] Stable Windows release
 - [ ] Reliable global shortcut
 - [ ] Reliable one-click paste
-- [ ] Boards stable
-- [ ] Search stable
-- [ ] Twemoji renderer stable
-- [ ] Renderer switching stable enough for release scope
-- [ ] Import/export stable
-- [ ] Keyboard navigation complete
+- [x] Boards stable
+- [x] Search stable
+- [x] Twemoji renderer stable
+- [x] Renderer switching stable enough for release scope
+- [x] Import/export stable
+- [x] Keyboard navigation complete
 - [ ] Accessibility baseline complete
 - [ ] Installer/uninstaller tested
-- [ ] Auto-update strategy decided
-- [ ] Privacy statement
-- [ ] Third-party attribution
-- [ ] Contribution guide
-- [ ] Issue templates
-- [ ] Release notes
-- [ ] Screenshots / demo media
-- [ ] README finalized
+- [x] Auto-update strategy decided
+- [x] Privacy statement
+- [x] Third-party attribution
+- [x] Contribution guide
+- [x] Issue templates
+- [x] Release notes
+- [x] Screenshots / demo media
+- [x] README finalized
+
+正式アイコン、公開文書、実Tauri E2E、署名済み配布workflow、Renderer Pack生成・署名検証は
+Release Candidateとして実装済み。Stable release、ショートカット／貼り付けの最終実機反復、
+アクセシビリティ手動項目、署名済みinstaller lifecycleはSignPath承認とユーザー側デスクトップでの
+最終受け入れ後にだけ完了扱いとする。
 
 ## Product promise
 
