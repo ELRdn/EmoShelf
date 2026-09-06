@@ -5,6 +5,9 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
+    "lp:dev": "vite --config lp/vite.config.ts",
+    "lp:build": "tsc --project lp/tsconfig.json && vite build --config lp/vite.config.ts",
+    "lp:preview": "vite preview --config lp/vite.config.ts --host 127.0.0.1 --port 5174",
     "dev": "vite",
     "build": "tsc && vite build && node tools/check-bundle-size.mjs",
     "preview": "vite preview",

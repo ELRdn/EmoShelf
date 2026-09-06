@@ -1,0 +1,71 @@
+name: LP Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/lp-pages.yml'
+      - 'app/lp/**'
+      - 'app/package.json'
+      - 'app/pnpm-lock.yaml'
+      - 'app/tsconfig.json'
+      - 'app/src-tauri/icons/128x128.png'
+      - 'images/screenshots/emoshelf-v1-shelf.png'
+  pull_request:
+    paths:
+      - '.github/workflows/lp-pages.yml'
+      - 'app/lp/**'
+      - 'app/package.json'
+      - 'app/pnpm-lock.yaml'
+      - 'app/tsconfig.json'
+      - 'app/src-tauri/icons/128x128.png'
+      - 'images/screenshots/emoshelf-v1-shelf.png'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lp-pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec biome check lp
+      - run: pnpm lp:build
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: app/lp/dist
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - name: Deploy LP
+        id: deployment
+        uses: actions/deploy-pages@v5
