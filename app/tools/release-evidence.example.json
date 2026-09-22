@@ -1,0 +1,125 @@
+{
+  "commit": "",
+  "sourceClean": false,
+  "candidateBuiltAt": "",
+  "artifactSha256": "",
+  "osBuild": "",
+  "reviewer": "",
+  "openCritical": null,
+  "openCoreBugs": null,
+  "checks": {
+    "foreground": {
+      "status": "pending",
+      "evidence": ""
+    },
+    "notepad": {
+      "status": "pending",
+      "evidence": "",
+      "appVersion": "",
+      "clickTrials": 0,
+      "enterTrials": 0,
+      "errors": null
+    },
+    "edge": {
+      "status": "pending",
+      "evidence": "",
+      "appVersion": "",
+      "clickTrials": 0,
+      "enterTrials": 0,
+      "errors": null
+    },
+    "chrome": {
+      "status": "pending",
+      "evidence": "",
+      "appVersion": "",
+      "clickTrials": 0,
+      "enterTrials": 0,
+      "errors": null
+    },
+    "claude-draft": {
+      "status": "pending",
+      "evidence": "",
+      "appVersion": "",
+      "clickTrials": 0,
+      "enterTrials": 0,
+      "errors": null
+    },
+    "photoshop-text": {
+      "status": "pending",
+      "evidence": "",
+      "appVersion": "",
+      "clickTrials": 0,
+      "enterTrials": 0,
+      "errors": null
+    },
+    "photoshop-image": {
+      "status": "pending",
+      "evidence": ""
+    },
+    "paint-image": {
+      "status": "pending",
+      "evidence": ""
+    },
+    "explorer-drag": {
+      "status": "pending",
+      "evidence": ""
+    },
+    "pinned": {
+      "status": "pending",
+      "evidence": ""
+    },
+    "failure-recovery": {
+      "status": "pending",
+      "evidence": ""
+    },
+    "persistence": {
+      "status": "pending",
+      "evidence": ""
+    },
+    "upgrade-recovery": {
+      "status": "pending",
+      "evidence": ""
+    },
+    "install-uninstall": {
+      "status": "pending",
+      "evidence": ""
+    },
+    "narrator": {
+      "status": "pending",
+      "evidence": ""
+    },
+    "display-scales": {
+      "status": "pending",
+      "evidence": ""
+    },
+    "multiple-monitors": {
+      "status": "pending",
+      "evidence": ""
+    },
+    "keyboard-ime": {
+      "status": "pending",
+      "evidence": ""
+    },
+    "performance": {
+      "status": "pending",
+      "evidence": "",
+      "revealSamples": 0,
+      "searchSamples": 0,
+      "revealP95Ms": null,
+      "searchP95Ms": null
+    },
+    "five-business-days": {
+      "status": "pending",
+      "evidence": "",
+      "dates": []
+    },
+    "signed-x64": {
+      "status": "pending",
+      "evidence": ""
+    },
+    "signed-arm64": {
+      "status": "pending",
+      "evidence": ""
+    }
+  }
+}

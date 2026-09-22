@@ -22,7 +22,9 @@
     "release:audit": "node tools/release-audit.mjs",
     "release:latest-json": "node tools/release-manifest.mjs latest-json",
     "release:checksums": "node tools/release-manifest.mjs checksums",
-    "renderer:prepare": "node tools/prepare-renderer-pack.mjs"
+    "renderer:prepare": "node tools/prepare-renderer-pack.mjs",
+    "release:readiness": "node tools/release-readiness.mjs",
+    "build:acceptance": "tauri build --no-bundle --config src-tauri/tauri.acceptance.conf.json"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

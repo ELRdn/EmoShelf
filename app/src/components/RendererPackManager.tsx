@@ -34,16 +34,18 @@ export function RendererPackManager({
       <header>
         <div>
           <strong>
-            {locale === "ja" ? "Renderer Packs" : "Renderer Packs"}
+            {locale === "ja"
+              ? "追加の絵文字スタイル"
+              : "Additional emoji styles"}
           </strong>
           <p>
             {locale === "ja"
-              ? "署名・ハッシュ・互換性を確認したパックだけを使用します。"
-              : "Only packs with valid signatures, hashes, and compatibility are used."}
+              ? "入手済みのEmoShelf用パックを追加できます。"
+              : "Add an EmoShelf pack you have already downloaded."}
           </p>
         </div>
         <button
-          className="quiet-button"
+          className="quiet-button renderer-pack-install"
           onClick={() => void run(pickAndInstallRendererPack)}
           type="button"
         >
@@ -95,8 +97,8 @@ export function RendererPackManager({
       ) : (
         <p className="pack-empty">
           {locale === "ja"
-            ? "インストール済みの外部Renderer Packはありません。"
-            : "No external Renderer Packs are installed."}
+            ? "追加パックは未導入です。現在はTwemojiとOS標準の絵文字を使えます。"
+            : "No additional packs are installed. Twemoji and OS emoji are available now."}
         </p>
       )}
     </section>

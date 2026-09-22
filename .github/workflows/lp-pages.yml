@@ -10,7 +10,7 @@ on:
       - 'app/pnpm-lock.yaml'
       - 'app/tsconfig.json'
       - 'app/src-tauri/icons/128x128.png'
-      - 'images/screenshots/emoshelf-v1-shelf.png'
+      - 'images/screenshots/**'
   pull_request:
     paths:
       - '.github/workflows/lp-pages.yml'
@@ -19,7 +19,7 @@ on:
       - 'app/pnpm-lock.yaml'
       - 'app/tsconfig.json'
       - 'app/src-tauri/icons/128x128.png'
-      - 'images/screenshots/emoshelf-v1-shelf.png'
+      - 'images/screenshots/**'
   workflow_dispatch:
 
 permissions:

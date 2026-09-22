@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { type PasteOutcome, parsePasteOutcome } from "./paste";
 import type { AppState, CustomAsset } from "./state";
 
 interface NativeCustomAssetRecord {
@@ -58,8 +59,20 @@ export async function copyCustomAsset(assetId: string): Promise<void> {
 export async function pasteCustomAsset(
   assetId: string,
   keepOpen: boolean,
-): Promise<void> {
-  await invoke("paste_image_asset", { assetId, keepOpen });
+): Promise<PasteOutcome> {
+  try {
+    return parsePasteOutcome(
+      await invoke("paste_image_asset", { assetId, keepOpen }),
+    );
+  } catch {
+    try {
+      await copyCustomAsset(assetId);
+      await invoke("show_recovery_window");
+      return { status: "copied", reason: "native-unavailable" };
+    } catch {
+      return { status: "failed", reason: "native-unavailable" };
+    }
+  }
 }
 
 export async function dragCustomAsset(assetId: string): Promise<void> {

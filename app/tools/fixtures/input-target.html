@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EmoShelf external insertion fixture</title>
+<style>
+  :root { color-scheme: light dark; font: 16px system-ui; }
+  body { max-width: 760px; margin: 48px auto; padding: 20px; }
+  textarea, [contenteditable] { box-sizing: border-box; width: 100%; min-height: 130px; border: 2px solid #8b7cff; padding: 16px; margin: 12px 0 24px; border-radius: 8px; font: 28px system-ui; }
+  output { display: block; white-space: pre-wrap; font: 14px monospace; }
+</style>
+<h1>External insertion fixture</h1>
+<p>Local test page. Nothing is transmitted or saved. Focus one editor, invoke EmoShelf,
+  select 🔥, and verify the result here. Record 30 clicks and 30 Enter actions separately.
+  Test the actual native shelf; setting this editor's value directly is not an insertion test.</p>
+<label for="plain">Plain textarea</label>
+<textarea id="plain" spellcheck="false"></textarea>
+<p id="rich-label">Rich-text editor</p>
+<!-- biome-ignore lint/a11y/useSemanticElements: This fixture intentionally exercises rich contenteditable editors. -->
+<div tabindex="0" id="rich" contenteditable="true" role="textbox" aria-labelledby="rich-label" aria-multiline="true"></div>
+<output id="result" aria-live="polite">No input yet.</output>
+<script>
+  const records = [];
+  for (const id of ["plain", "rich"]) {
+    document.getElementById(id).addEventListener("input", event => {
+      const field = event.currentTarget;
+      const content = id === "plain" ? field.value : field.textContent;
+      records.push({ editor: id, inputType: event.inputType, trusted: event.isTrusted,
+        fireCount: [...content].filter(value => value === "🔥").length,
+        otherCharacters: [...content].filter(value => value !== "🔥").length });
+      document.getElementById("result").textContent = JSON.stringify(records, null, 2);
+    });
+  }
+</script>
+</html>

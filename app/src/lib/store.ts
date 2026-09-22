@@ -17,6 +17,7 @@ import { type ImportMode, mergeAppStates } from "./transfer";
 
 const MAX_RECENT = 30;
 const SAVE_DEBOUNCE_MS = 300;
+let saveQueue: Promise<void> = Promise.resolve();
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function snapshotState(state: ShelfStore): AppState {
@@ -36,19 +37,31 @@ function serialize(state: ShelfStore): string {
   return JSON.stringify(snapshotState(state));
 }
 
+function enqueueSave(content: string): Promise<void> {
+  const next = saveQueue
+    .catch(() => undefined)
+    .then(() => invoke<void>("save_state", { content }));
+  saveQueue = next;
+  return next;
+}
+
 function scheduleSave(state: ShelfStore): void {
-  if (state.persistenceBlocked) {
-    return;
-  }
-  if (saveTimer !== null) {
-    clearTimeout(saveTimer);
-  }
+  if (state.persistenceBlocked) return;
+  if (saveTimer !== null) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    invoke("save_state", { content: serialize(state) }).catch((error) => {
-      useShelfStore.setState({ saveError: String(error) });
-      console.error("EmoShelf: state save failed", error);
-    });
+    const current = useShelfStore.getState();
+    if (current.persistenceBlocked) return;
+    void enqueueSave(serialize(current))
+      .then(() => {
+        useShelfStore.setState({ saveError: undefined });
+      })
+      .catch(() => {
+        useShelfStore.setState({
+          saveError:
+            "保存できませんでした。空き容量と保存先を確認して再試行してください。 / Could not save. Check disk space and retry.",
+        });
+      });
   }, SAVE_DEBOUNCE_MS);
 }
 
@@ -262,7 +275,7 @@ export const useShelfStore = create<ShelfStore>()((set, get) => ({
       clearTimeout(saveTimer);
       saveTimer = null;
     }
-    await invoke("save_state", { content: serialize(get()) });
+    await enqueueSave(serialize(get()));
     set({ saveError: undefined });
   },
 

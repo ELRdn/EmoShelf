@@ -2,6 +2,11 @@
 
 This roadmap describes the planned path from prototype to a stable public release.
 
+The 2026-09-22 reliability refresh is implemented locally and undergoing qualification.
+Historical feature checkmarks below are not release acceptance. See the
+[qualification record](app/docs/release-qualification.md) for current evidence,
+remaining device checks and the signed-candidate publication gate.
+
 EmoShelf is intentionally scoped as a focused desktop utility:
 
 > **A free and open-source Personal Emoji Shelf.**
@@ -11,6 +16,50 @@ The goal is not to build the largest emoji platform. The goal is to make frequen
 ---
 
 # Milestones
+
+## Current checkpoint — 2026-09-22
+
+### Implemented and locally checked
+
+- [x] Alt+E always reveals the shelf; restore/show/raise/focus share one verified path
+- [x] Bounded target/focus/clipboard checks and structured text/image paste outcomes
+- [x] Pinned returns focus without covering the editor or taking focus back
+- [x] Leftmost All opens the full catalog and resets search/category filters
+- [x] Native emoji centered across catalog, shelf, details and selection summary
+- [x] Optional details, explicit edit/compose/copy modes, IME guards and local practice
+- [x] Serialized saves and save completion before Quit/update installation
+- [x] 84 frontend, 7 tooling, 71 Rust tests and 10 desktop E2E scenarios recorded
+
+The checks above do not establish the full external-app or release acceptance gates.
+Physical Ctrl+1 remains unverified after an inconclusive desktop-helper attempt.
+
+### Agreed emoji style delivery
+
+- [x] Keep Twemoji bundled and use OS-native emoji without an additional download
+- [x] Use signed GitHub Releases packs for optional Fluent, Noto and OpenMoji
+- [x] Local-file pack validation/import, enable/disable and removal
+- [x] Explicit missing/disabled-pack labels and preview-versus-pasted-text explanation
+- [ ] Configure production pack signing and embed the corresponding verification key
+- [ ] Generate and qualify the three versioned packs with coverage and license records
+- [ ] Publish the verified `.emoshelf-renderer` assets on GitHub Releases
+- [ ] Add an in-app style gallery with previews, size/version and download/install
+- [ ] Show progress, cancellation/retry and actionable offline/download errors
+- [ ] Support verified pack updates, safe rollback and offline use after installation
+- [ ] Validate the complete download → verify → install → select → restart workflow
+
+The distribution model is decided; pack publication and in-app downloading are
+not complete. The published RC 1 contains no downloadable renderer-pack assets.
+See [renderer packs](app/docs/renderer-packs.md).
+
+### Public launch gates still open
+
+- [ ] Target-app matrix: 30 clicks and 30 Enter insertions per applicable application
+- [ ] Image paste/drag, abnormal focus/clipboard cases and installed data lifecycle
+- [ ] Narrator, full keyboard/IME, display scaling and multiple-monitor acceptance
+- [ ] Reveal-to-frame/focus p95 <=300ms and search-to-frame p95 <=100ms
+- [ ] Five business days on one frozen candidate with no core regressions or data loss
+- [ ] Signed x64/ARM64 candidates, installer/update/uninstall and recovery validation
+- [ ] Promote the qualified draft with explicit publication approval
 
 ## Phase 0 — Foundation
 
@@ -100,6 +149,7 @@ A new user should understand within the first session that EmoShelf is a **Shelf
 
 - [x] `My Shelf` as default Board
 - [x] Horizontal Board tabs
+- [x] Permanent leftmost All catalog view (2026-09-22)
 - [x] `+` New Board action
 - [x] Emoji grid
 - [x] Empty state
@@ -300,7 +350,9 @@ Examples:
 - [x] Native/system
 - [x] Per-renderer attribution information
 
-Fluent/Noto/OpenMojiはv0.4の署名付きRenderer Packとして導入する。v0.2では
+Fluent/Noto/OpenMojiは署名付きRenderer Packとして追加配布する。2026-09-22時点では
+ローカルPack管理まで実装済みで、GitHubでのPack公開とアプリ内ダウンロードは未実装。
+v0.2では
 未インストールの外部rendererを選択できない状態で表示し、ライセンス情報だけを先行表示する。
 
 ## Import / Export
@@ -458,9 +510,9 @@ v1.0手動ゲートへ残す。Narrator、125%／150%／200%、大文字、高DP
 - [x] Boards stable
 - [x] Search stable
 - [x] Twemoji renderer stable
-- [x] Renderer switching stable enough for release scope
+- [ ] Renderer switching and optional-pack delivery accepted for release scope
 - [x] Import/export stable
-- [x] Keyboard navigation complete
+- [ ] Physical keyboard navigation acceptance complete
 - [ ] Accessibility baseline complete
 - [ ] Installer/uninstaller tested
 - [x] Auto-update strategy decided
@@ -469,8 +521,8 @@ v1.0手動ゲートへ残す。Narrator、125%／150%／200%、大文字、高DP
 - [x] Contribution guide
 - [x] Issue templates
 - [x] Release notes
-- [x] Screenshots / demo media
-- [x] README finalized
+- [x] Current development screenshot and preview media
+- [ ] Final release screenshot/demo and README verified against the qualified artifact
 
 正式アイコン、公開文書、実Tauri E2E、署名済み配布workflow、Renderer Pack生成・署名検証は
 Release Candidateとして実装済み。Stable release、ショートカット／貼り付けの最終実機反復、

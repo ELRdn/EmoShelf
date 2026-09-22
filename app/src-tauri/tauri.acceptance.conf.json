@@ -1,0 +1,20 @@
+{
+  "identifier": "com.emoshelf.acceptance",
+  "app": {
+    "windows": [
+      {
+        "title": "EmoShelf \u00b7 Acceptance",
+        "width": 880,
+        "height": 660,
+        "minWidth": 480,
+        "minHeight": 320,
+        "visible": true,
+        "decorations": false,
+        "shadow": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": false
+  }
+}

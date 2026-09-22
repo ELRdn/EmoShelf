@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import screenshot from "../../../images/screenshots/emoshelf-v1-shelf.png";
+import screenshot from "../../../images/screenshots/emoshelf-reliability-preview.jpg";
 import icon from "../../src-tauri/icons/128x128.png";
 import { socialLinks } from "./config";
 import "./style.css";
@@ -97,7 +97,7 @@ const copy = {
       "自分の画像も、棚の仲間に",
       "データは自分のPCに保存",
     ],
-    actual: "実アプリの画面 / v1.0 Release Candidate",
+    actual: "実アプリの画面 / 品質改善中の開発版",
     privacy: "あなたの棚は、あなたのPCに。",
     privacyBody:
       "アカウント登録も、クラウド同期も不要。アプリにアクセス解析は含まれません。",
@@ -105,7 +105,7 @@ const copy = {
     questions: [
       [
         "どのWindowsで使えますか？",
-        "Windows 11のx64・ARM64に対応しています。Macやスマートフォン向けのアプリではありません。このページのデモはスマートフォンでも試せます。",
+        "Windows 11向けに開発中です。x64・ARM64は、それぞれ実機検証と署名が完了した版を正式公開します。このページの体験デモはスマートフォンでも試せます。",
       ],
       [
         "無料で使えますか？",
@@ -181,14 +181,14 @@ const copy = {
       "Bring your own images",
       "Keep your data on your PC",
     ],
-    actual: "Actual app / v1.0 Release Candidate",
+    actual: "Actual app / reliability development preview",
     privacy: "Your shelf. Your computer.",
     privacyBody: "No account. No cloud sync required. No analytics in the app.",
     faqTitle: "A few good questions.",
     questions: [
       [
         "Which Windows versions are supported?",
-        "EmoShelf supports Windows 11 on x64 and ARM64. It is not a Mac or mobile app. You can still try this browser demo on your phone.",
+        "EmoShelf is being developed for Windows 11. Each x64 or ARM64 release requires its own device validation and signing. You can try this browser demo on your phone.",
       ],
       [
         "Is it free?",
@@ -588,8 +588,8 @@ export default function App() {
                 src={screenshot}
                 alt={
                   lang === "ja"
-                    ? "EmoShelfの実画面。検索、My Shelf、絵文字一覧と詳細ペイン。"
-                    : "EmoShelf app with search, My Shelf, an emoji grid and a detail pane."
+                    ? "EmoShelf開発版の実画面。左端のAllタブ、検索、Windows標準の絵文字一覧と詳細の開閉ボタン。"
+                    : "EmoShelf development build with the leftmost All tab, search, native Windows emoji and an optional details control."
                 }
                 loading="lazy"
               />

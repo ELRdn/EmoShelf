@@ -8,7 +8,7 @@ on:
         required: true
         default: 1.0.0
       confirmation:
-        description: Type RELEASE_v1.0.0 after every manual gate is complete
+        description: Type RELEASE_v1.0.0 to prepare a signed draft for qualification
         required: true
 
 permissions:
@@ -542,7 +542,7 @@ jobs:
           if ($uninstall.ExitCode -ne 0) { throw "MSI uninstall failed: $($uninstall.ExitCode)" }
 
   publish:
-    name: Publish signed v1.0.0
+    name: Prepare signed v1.0.0 draft
     needs: [renderer-packs, build-windows, installer-smoke]
     runs-on: ubuntu-latest
     environment: production-signing
@@ -585,7 +585,7 @@ jobs:
             --directory ../release \
             --output ../release/SHA256SUMS.txt
 
-      - name: Publish only the verified signed artifacts
+      - name: Keep signed artifacts in a draft until qualification is complete
         shell: bash
         run: |
           set -euo pipefail
@@ -596,26 +596,10 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "EmoShelf v${{ inputs.version }}" \
             --notes-file RELEASE_NOTES.md \
-            --latest
+            --draft
 
-      - name: Verify the public updater endpoint
+      - name: Verify the candidate remains an unpublished draft
         shell: bash
         run: |
           set -euo pipefail
-          endpoint="https://github.com/ELRdn/EmoShelf/releases/latest/download/latest.json"
-          for attempt in {1..12}
-          do
-            if curl --fail --silent --show-error --location "$endpoint" -o public-latest.json; then
-              node -e '
-                const value = require("./public-latest.json");
-                if (value.version !== "1.0.0") process.exit(1);
-                for (const key of ["windows-x86_64", "windows-aarch64"]) {
-                  if (!value.platforms?.[key]?.url || !value.platforms?.[key]?.signature) process.exit(1);
-                }
-              '
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "::error::The public latest.json endpoint did not become available."
-          exit 1
+          test "$(gh release view "v${{ inputs.version }}" --json isDraft --jq '.isDraft')" = "true"

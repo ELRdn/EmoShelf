@@ -103,6 +103,8 @@ for (const marker of [
   "release:latest-json",
   "EMOSHELF_UPDATER_PRIVATE_KEY",
   "EMOSHELF_RENDERER_PRIVATE_KEY",
+  "--draft",
+  "Verify the candidate remains an unpublished draft",
 ]) {
   if (!releaseWorkflow.includes(marker)) {
     fail(`release workflow is missing required gate: ${marker}`);

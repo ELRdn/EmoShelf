@@ -8,23 +8,31 @@
 
 EmoShelf is a fast, local-first Windows app for keeping the emojis, sequences, symbols, and custom images you actually use within instant reach.
 
-Press <kbd>Alt</kbd> + <kbd>E</kbd>, choose from your Board, and paste. No account, cloud sync, telemetry, or remote profile is required.
+Press <kbd>Alt</kbd> + <kbd>E</kbd>, choose from your Board or **All**, and paste. No account, cloud sync, telemetry, or remote profile is required.
 
-![EmoShelf v1.0 Shelf](./images/screenshots/emoshelf-v1-shelf.png)
+![EmoShelf All catalog with native emoji — development preview](./images/screenshots/emoshelf-reliability-preview.jpg)
+
+Actual local development build, September 22, 2026. These changes are not included
+in the published RC 1 installer; formal release qualification is still in progress.
 
 ## What it does
 
 - Personal Boards with drag-and-drop ordering, safe delete/undo, and app-specific mapping
-- Search across 1,949 emoji with English and Japanese names and tags
-- Twemoji and native rendering, plus separately signed Fluent, Noto, and OpenMoji packs
+- A permanent leftmost **All** tab and search across 1,949 emoji with English and Japanese names and tags
+- Bundled Twemoji and OS-native emoji, with corrected native alignment across the shelf, catalog and details
 - Single emoji paste, multi-emoji Compose Tray, reusable sequences, and copy-only fallback
 - PNG, WebP, and sanitized SVG import with content-addressed local storage
 - `.emoshelf` backup, preview, merge, and replace workflows
 - Global shortcut, Quick/Pinned modes, system tray, autostart, monitor-aware placement, and single instance
 - Dark, light, and system themes with keyboard navigation, visible focus, high-contrast support, and Reduced Motion
-- User-approved, signature-verified updates
+- Update support with explicit consent and signature verification; production signing setup is still pending
 
 ## Fast path
+
+The unreleased reliability refresh is being qualified before broader distribution.
+See the [release qualification record](app/docs/release-qualification.md) for verified
+behavior and pending compatibility/signing checks. The screenshot shows the current
+development UI; it does not demonstrate external application compatibility.
 
 ```text
 Alt + E → Board → emoji → target application
@@ -38,9 +46,53 @@ Keyboard controls:
 | Arrow keys | Move through items |
 | `Enter` | Paste |
 | `Ctrl+Enter` | Keep open when pasting, or add a search result to the active Board |
-| `Ctrl+K` | Open item actions |
+| `Ctrl+K` | Open Board actions in the personal Shelf view |
 | `Ctrl+1..9` | Switch Board |
-| `Esc` | Close dialog, clear search, then hide EmoShelf |
+| `Esc` | Dismiss dialog/search, return from All to Shelf, then hide EmoShelf |
+
+Normal clicks and Enter paste into the previously active editor. Open **Details**
+to inspect items without pasting on click. **Copy only** is an explicit setting.
+If automatic insertion is unavailable, return to your editor and press `Ctrl+V`;
+the shelf keeps a visible recovery message. **How to use** includes a private,
+unsaved practice editor and the steps for trying insertion in another app.
+
+Alt+E always brings the shelf forward, including from the background or a minimized
+window. Use Escape or the close button to dismiss it. **All** opens the entire
+catalog; clicking it again clears the search and category filter. Personal Boards
+and their `Ctrl+1..9` assignments are unchanged. Physical keyboard coverage and
+external-app compatibility are still being qualified; see the linked record.
+
+## Emoji styles: available now and next
+
+| Style | Current availability |
+| --- | --- |
+| Twemoji | Included with the app; usable offline |
+| Native / System | Uses the OS emoji font; no additional download |
+| Fluent Emoji, Noto Emoji, OpenMoji | Pack support implemented; downloadable packs are not yet published |
+
+The agreed distribution model keeps the defaults immediately usable and distributes
+the three optional styles as signed assets on GitHub Releases. A future in-app
+style gallery will show previews and offer download/install/update controls; an
+installed pack will remain usable offline. **That download flow is not implemented
+yet.** The current UI can import a local pack file when the app was built with its
+trusted verification key, and identifies missing or disabled packs explicitly.
+
+Style changes affect EmoShelf's preview. Unicode pasted into another application
+uses that application's emoji font. See the [pack specification and delivery
+checklist](app/docs/renderer-packs.md) for the remaining work.
+
+## Development checkpoint — September 22, 2026
+
+Local checks passed: **84 frontend tests, 7 tooling tests, 71 Rust tests, and 10
+desktop E2E scenarios**. The Rust results cover the native Alt+E/paste changes;
+later All/style changes are frontend changes. Native alignment was also checked
+at four sizes. External insertion has only limited Notepad smoke coverage on the
+earlier Alt+E candidate, not the full acceptance matrix on the latest binary.
+
+The latest local x64 candidate is unsigned. Signed installers, ARM64 acceptance,
+the full app/DPI/accessibility matrix, performance qualification and five business
+days of stable use remain required. [Evidence and limitations](app/docs/release-qualification.md)
+are recorded separately from implementation completion.
 
 ## Install
 
@@ -52,7 +104,7 @@ Formal `v1.0.0` artifacts are released only after SignPath Foundation approval, 
 
 ### Unsigned RC installation / 未署名RCのインストール
 
-**SignPath申請済み・承認待ちです。現在のRCは未署名のテスト版であり、正式な署名済みリリースではありません。** 未署名のため、Windowsは証明書で発行元を確認できません。以下の確認でリスクを減らせますが、安全性を保証するものではありません。不安がある場合や業務用・学校管理のPCでは、署名済み正式版を待つか管理者に相談してください。
+**現在のRCは未署名のテスト版であり、正式な署名済みリリースではありません。SignPathの承認状況と署名設定は配布候補の作成前に再確認します。** 未署名のため、Windowsは証明書で発行元を確認できません。以下の確認でリスクを減らせますが、安全性を保証するものではありません。不安がある場合や業務用・学校管理のPCでは、署名済み正式版を待つか管理者に相談してください。
 
 English summary: use only the linked GitHub Release, choose the matching architecture, and compare the complete SHA-256 before opening the installer. A matching hash is not proof of publisher identity or safety. Scan the file, keep Windows protections enabled, and stop on a threat detection or policy block. Only consider the per-file SmartScreen **More info → Run anyway** option if the warning is solely about an unrecognized app and you trust the source. This RC has no production updater configured; back up and update manually.
 

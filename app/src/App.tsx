@@ -8,6 +8,7 @@ import { CustomAssetGrid } from "./components/CustomAssetGrid";
 import { DataTransferDialog } from "./components/DataTransferDialog";
 import { EmojiArtwork } from "./components/EmojiArtwork";
 import { Onboarding } from "./components/Onboarding";
+import { PracticePanel } from "./components/PracticePanel";
 import { RendererPackManager } from "./components/RendererPackManager";
 import { ShelfGrid } from "./components/ShelfGrid";
 import { VirtualEmojiGrid } from "./components/VirtualEmojiGrid";
@@ -29,11 +30,12 @@ import {
   toDisplayMetadata,
 } from "./lib/emoji";
 import { resolveLocale, translate } from "./lib/i18n";
-import { copyPayload, pastePayload } from "./lib/paste";
+import { copyPayload, type PasteOutcome, pastePayload } from "./lib/paste";
 import {
+  beginSearchFrame,
   type ClientPerformanceSnapshot,
+  finishSearchFrame,
   getClientPerformanceSnapshot,
-  measureCatalogSearch,
   recordCatalogReady,
 } from "./lib/performance";
 import {
@@ -52,6 +54,7 @@ import {
   checkForUpdate,
   installAvailableUpdate,
 } from "./lib/updates";
+import { useDesktopLifecycle } from "./lib/useDesktopLifecycle";
 
 type CategoryId = number | "all" | "recent";
 type Modal =
@@ -61,6 +64,7 @@ type Modal =
   | "save-sequence"
   | "edit-sequence"
   | "settings"
+  | "practice"
   | null;
 
 interface Selection {
@@ -302,6 +306,8 @@ function App() {
   const [category, setCategory] = useState<CategoryId>("all");
   const [selection, setSelection] = useState<Selection>();
   const [editMode, setEditMode] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const insertionPending = useRef(false);
   const [modal, setModal] = useState<Modal>(null);
   const [boardName, setBoardName] = useState("");
   const [boardIcon, setBoardIcon] = useState("✨");
@@ -316,6 +322,7 @@ function App() {
   const [foregroundContext, setForegroundContext] =
     useState<ForegroundContext>();
   const [integrationError, setIntegrationError] = useState("");
+  useDesktopLifecycle(setIntegrationError);
   const [rendererPacks, setRendererPacks] = useState<RendererPackRecord[]>([]);
   const [catalogReady, setCatalogReady] = useState(isEmojiCatalogLoaded);
   const [catalogError, setCatalogError] = useState("");
@@ -365,6 +372,7 @@ function App() {
 
   const activeBoard =
     boards.find((board) => board.id === activeBoardId) ?? boards[0];
+  const personalShelfMode = !catalogMode && !frequentMode && !customMode;
   const frequentItems = useMemo(() => getFrequentItems(boards), [boards]);
   const customAssetList = useMemo(
     () =>
@@ -399,7 +407,7 @@ function App() {
   );
   const catalogEntries = useMemo(() => {
     if (query.trim()) {
-      return measureCatalogSearch(() => searchCatalog(query, 1949, locale));
+      return searchCatalog(query, 1949, locale);
     }
     if (category === "recent") {
       return recent.flatMap((entry) => {
@@ -414,6 +422,18 @@ function App() {
       ? catalog
       : catalog.filter((entry) => entry.group === category);
   }, [catalog, category, locale, query, recent]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Measure each newly committed result set after a rendering opportunity.
+  useEffect(() => {
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(finishSearchFrame);
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
+    };
+  }, [catalogEntries]);
 
   const refreshPerformance = useCallback(async () => {
     setClientPerformance(getClientPerformanceSnapshot());
@@ -466,6 +486,7 @@ function App() {
     }
     setUpdatePhase("installing");
     try {
+      await useShelfStore.getState().persistNow();
       await installAvailableUpdate();
     } catch (error) {
       setUpdatePhase("error");
@@ -624,94 +645,99 @@ function App() {
     return () => window.removeEventListener("focus", onFocus);
   }, [loaded, refreshForegroundContext, settings.perAppBoardsEnabled]);
 
+  const reportInsertion = useCallback(
+    (outcome: PasteOutcome) => {
+      if (outcome.status === "failed") {
+        setIntegrationError(
+          locale === "ja"
+            ? "操作を完了できませんでした。入力先とクリップボードを確認して、もう一度お試しください。"
+            : "Could not complete the action. Check your editor and clipboard, then try again.",
+        );
+        return false;
+      }
+      if (outcome.status === "copied" && outcome.reason !== "copy-only") {
+        setIntegrationError(translate(locale, "pasteFailed"));
+      } else {
+        setIntegrationError("");
+        if (outcome.status === "copied") showToast(translate(locale, "copied"));
+      }
+      return true;
+    },
+    [locale, showToast],
+  );
+
   const pasteSelection = useCallback(
     async (current: Selection, forceKeepOpen = false) => {
-      const keepOpen =
-        forceKeepOpen ||
-        settings.pinned ||
-        settings.selectionBehavior === "paste-keep-open";
-      if (current.itemType === "image" && current.assetId) {
-        try {
+      if (insertionPending.current) return;
+      insertionPending.current = true;
+      try {
+        const keepOpen =
+          forceKeepOpen ||
+          settings.pinned ||
+          settings.selectionBehavior === "paste-keep-open";
+        let outcome: PasteOutcome;
+        if (current.itemType === "image" && current.assetId) {
           if (settings.selectionBehavior === "copy-only") {
             await copyCustomAsset(current.assetId);
-            showToast(translate(locale, "copied"));
+            outcome = { status: "copied", reason: "copy-only" };
           } else {
-            await pasteCustomAsset(current.assetId, keepOpen);
+            outcome = await pasteCustomAsset(current.assetId, keepOpen);
           }
-          const selectedItem = current.itemId
-            ? useShelfStore
-                .getState()
-                .boards.flatMap((board) => board.items)
-                .find((item) => item.id === current.itemId)
-            : undefined;
-          if (selectedItem) {
-            useShelfStore.getState().recordItemUse(selectedItem);
-          }
-          setIntegrationError("");
-        } catch (error) {
-          setIntegrationError(String(error));
+        } else {
+          outcome = await pastePayload(
+            current.payload,
+            settings.selectionBehavior,
+            keepOpen,
+          );
         }
-        return;
-      }
-      const outcome = await pastePayload(
-        current.payload,
-        settings.selectionBehavior,
-        keepOpen,
-      );
-      const store = useShelfStore.getState();
-      const selectedItem = current.itemId
-        ? store.boards
-            .flatMap((board) => board.items)
-            .find((item) => item.id === current.itemId)
-        : undefined;
-      if (selectedItem) {
-        store.recordItemUse(selectedItem);
-      } else if (current.itemType !== "image") {
-        store.recordUse(
-          current.payload,
-          current.itemType === "sequence" || current.itemType === "symbol"
-            ? current.itemType
-            : "unicode",
-        );
-      }
-      if (outcome === "copied") {
-        showToast(
-          settings.selectionBehavior === "copy-only"
-            ? translate(locale, "copied")
-            : translate(locale, "pasteFailed"),
-        );
+        if (!reportInsertion(outcome)) return;
+        const store = useShelfStore.getState();
+        const item = current.itemId
+          ? store.boards
+              .flatMap((board) => board.items)
+              .find((item) => item.id === current.itemId)
+          : undefined;
+        if (item) store.recordItemUse(item);
+        else if (current.itemType !== "image")
+          store.recordUse(
+            current.payload,
+            current.itemType === "sequence" || current.itemType === "symbol"
+              ? current.itemType
+              : "unicode",
+          );
+      } catch {
+        reportInsertion({ status: "failed", reason: "operation-failed" });
+      } finally {
+        insertionPending.current = false;
       }
     },
-    [locale, settings.pinned, settings.selectionBehavior, showToast],
+    [settings.pinned, settings.selectionBehavior, reportInsertion],
   );
 
   const pasteComposition = useCallback(
     async (forceKeepOpen = false) => {
       const payload = composition.join("");
-      if (!payload) {
-        return;
-      }
-      const keepOpen =
-        forceKeepOpen ||
-        settings.pinned ||
-        settings.selectionBehavior === "paste-keep-open";
-      const outcome = await pastePayload(
-        payload,
-        settings.selectionBehavior,
-        keepOpen,
-      );
-      useShelfStore.getState().recordUse(payload, "sequence");
-      if (outcome === "copied") {
-        showToast(translate(locale, "copied"));
+      if (!payload || insertionPending.current) return;
+      insertionPending.current = true;
+      try {
+        const keepOpen =
+          forceKeepOpen ||
+          settings.pinned ||
+          settings.selectionBehavior === "paste-keep-open";
+        if (
+          reportInsertion(
+            await pastePayload(payload, settings.selectionBehavior, keepOpen),
+          )
+        ) {
+          useShelfStore.getState().recordUse(payload, "sequence");
+        }
+      } catch {
+        reportInsertion({ status: "failed", reason: "operation-failed" });
+      } finally {
+        insertionPending.current = false;
       }
     },
-    [
-      composition,
-      locale,
-      settings.pinned,
-      settings.selectionBehavior,
-      showToast,
-    ],
+    [composition, settings.pinned, settings.selectionBehavior, reportInsertion],
   );
 
   const moveKeyboardSelection = useCallback(
@@ -726,7 +752,10 @@ function App() {
       );
       const columns = Math.max(
         4,
-        Math.floor(Math.max(320, window.innerWidth - 290) / 72),
+        Math.floor(
+          (document.querySelector(".virtual-grid-scroll, .shelf-grid")
+            ?.clientWidth || 320) / 72,
+        ),
       );
       const delta =
         direction === "left"
@@ -744,12 +773,36 @@ function App() {
         ),
       );
       setSelection(navigableSelections[nextIndex]);
+      if (
+        document.activeElement?.closest(
+          ".shelf-grid, .virtual-grid-scroll, .custom-asset-grid",
+        )
+      ) {
+        requestAnimationFrame(() => {
+          const next = navigableSelections[nextIndex];
+          const button = Array.from(
+            document.querySelectorAll<HTMLButtonElement>(
+              "[data-shelf-item-id], [data-catalog-index], [data-asset-id]",
+            ),
+          ).find((element) =>
+            next.itemId
+              ? element.dataset.shelfItemId === next.itemId
+              : next.assetId
+                ? element.dataset.assetId === next.assetId
+                : element.dataset.catalogIndex === String(nextIndex),
+          );
+          button?.focus({ preventScroll: true });
+          button?.scrollIntoView({ block: "nearest" });
+        });
+      }
     },
     [navigableSelections, selection],
   );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.keyCode === 229 || event.repeat) return;
+      if (modal && event.key !== "Escape") return;
       if (event.ctrlKey && event.key.toLowerCase() === "f") {
         event.preventDefault();
         setFrequentMode(false);
@@ -758,7 +811,11 @@ function App() {
         searchRef.current?.focus();
         return;
       }
-      if (event.ctrlKey && event.key.toLowerCase() === "k") {
+      if (
+        event.ctrlKey &&
+        event.key.toLowerCase() === "k" &&
+        personalShelfMode
+      ) {
         event.preventDefault();
         setActionMenuOpen((open) => !open);
         return;
@@ -795,8 +852,50 @@ function App() {
       if (
         target?.matches("input, textarea, select, [contenteditable='true']")
       ) {
+        if (target === searchRef.current && !modal) {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            moveKeyboardSelection(event.key === "ArrowDown" ? "right" : "left");
+          } else if (event.key === "Enter" && navigableSelections.length) {
+            event.preventDefault();
+            const current =
+              navigableSelections.find(
+                (entry) => entry.payload === selection?.payload,
+              ) ?? navigableSelections[0];
+            setSelection(current);
+            if (event.ctrlKey && activeBoard) {
+              const entry = findByEmoji(current.payload, locale);
+              if (entry) {
+                const added = useShelfStore
+                  .getState()
+                  .addItemToBoard(activeBoard.id, {
+                    type: "unicode",
+                    payload: entry.emoji,
+                    display: toDisplayMetadata(entry),
+                  });
+                if (added) showToast(translate(locale, "addedToShelf"));
+              }
+            } else if (!event.ctrlKey && !editMode) {
+              if (composeOpen)
+                setComposition((items) =>
+                  items.length >= 32 ? items : [...items, current.payload],
+                );
+              else void pasteSelection(current);
+            }
+          }
+        }
         return;
       }
+      // Preserve native button/link/disclosure activation. Grid arrows remain
+      // application navigation; editable grids keep dnd-kit's keyboard handling.
+      if (editMode && target?.closest(".shelf-grid")) return;
+      if (
+        target?.closest("button, a, summary, [role='button']") &&
+        !target.closest(
+          "[data-shelf-item-id], [data-catalog-index], [data-asset-id]",
+        )
+      )
+        return;
       const direction =
         event.key === "ArrowLeft"
           ? "left"
@@ -812,7 +911,7 @@ function App() {
         moveKeyboardSelection(direction);
         return;
       }
-      if (event.key === "Enter" && !modal) {
+      if (event.key === "Enter" && !modal && !editMode) {
         if (composeOpen && composition.length && !event.ctrlKey) {
           event.preventDefault();
           void pasteComposition();
@@ -886,8 +985,11 @@ function App() {
     locale,
     modal,
     moveKeyboardSelection,
+    navigableSelections,
+    editMode,
     pasteComposition,
     pasteSelection,
+    personalShelfMode,
     query,
     selection,
     settings.pinned,
@@ -933,6 +1035,7 @@ function App() {
           onFinish={(items) => {
             const id = useShelfStore.getState().finishOnboarding(items);
             setActiveBoardId(id);
+            setModal("practice");
           }}
           renderer={settings.renderer}
         />
@@ -954,20 +1057,22 @@ function App() {
       addPayloadToComposition(item.payload);
       return;
     }
-    if (!editMode) {
+    if (!editMode && !detailsOpen) {
       void pasteSelection(next);
     }
   };
 
   const selectCatalogEntry = (entry: CatalogEntry) => {
-    setSelection(selectionFromCatalog(entry));
-    if (composeOpen) {
-      addPayloadToComposition(entry.emoji);
-    }
+    const next = selectionFromCatalog(entry);
+    setSelection(next);
+    if (composeOpen) addPayloadToComposition(entry.emoji);
+    else if (!editMode && !detailsOpen) void pasteSelection(next);
   };
 
   const selectCustomAsset = (asset: CustomAsset) => {
-    setSelection(selectionFromAsset(asset, locale));
+    const next = selectionFromAsset(asset, locale);
+    setSelection(next);
+    if (!editMode && !detailsOpen) void pasteSelection(next);
   };
 
   const importCustomAsset = async () => {
@@ -1007,10 +1112,10 @@ function App() {
     } catch (error) {
       try {
         await copyCustomAsset(assetId);
-        showToast(
+        setIntegrationError(
           locale === "ja"
-            ? "ドラッグできなかったため画像をコピーしました"
-            : "Drag failed, so the image was copied",
+            ? "外部ドラッグできませんでした。画像をコピーしたので、貼り付け先でCtrl+Vを押してください。"
+            : "Drag failed. The image was copied; press Ctrl+V in your destination.",
         );
       } catch {
         setIntegrationError(String(error));
@@ -1114,7 +1219,21 @@ function App() {
         pinned={settings.pinned}
       />
 
-      <main className="shelf-app" id="main-content">
+      <main
+        className="shelf-app"
+        id="main-content"
+        onFocusCapture={(event) => {
+          const element = event.target as HTMLElement;
+          const current = navigableSelections.find((entry, index) =>
+            entry.itemId
+              ? element.dataset.shelfItemId === entry.itemId
+              : entry.assetId
+                ? element.dataset.assetId === entry.assetId
+                : element.dataset.catalogIndex === String(index),
+          );
+          if (current) setSelection(current);
+        }}
+      >
         {recoveredFromBackup ? (
           <div className="recovery-banner" role="status">
             <span aria-hidden="true">✓</span>
@@ -1164,6 +1283,8 @@ function App() {
           <span aria-hidden="true">⌕</span>
           <input
             onChange={(event) => {
+              beginSearchFrame();
+              setSelection(undefined);
               setQuery(event.target.value);
               setFrequentMode(false);
               setCustomMode(false);
@@ -1194,17 +1315,41 @@ function App() {
 
         <div className="board-row">
           <nav aria-label="Boards" className="board-tabs">
+            <div className="board-tab-wrap">
+              <button
+                aria-current={catalogMode ? "page" : undefined}
+                className={catalogMode ? "board-tab is-active" : "board-tab"}
+                onClick={() => {
+                  setCatalogMode(true);
+                  setFrequentMode(false);
+                  setCustomMode(false);
+                  setEditMode(false);
+                  setActionMenuOpen(false);
+                  setQuery("");
+                  setCategory("all");
+                  setSelection(undefined);
+                }}
+                title={locale === "ja" ? "すべての絵文字" : "All emoji"}
+                type="button"
+              >
+                <span aria-hidden="true">▦</span>
+                <span>All</span>
+              </button>
+            </div>
             {boards.map((board, index) => (
               <div className="board-tab-wrap" key={board.id}>
                 <button
                   aria-current={
-                    activeBoard?.id === board.id ? "page" : undefined
+                    personalShelfMode && activeBoard?.id === board.id
+                      ? "page"
+                      : undefined
                   }
                   className={
-                    activeBoard?.id === board.id
+                    personalShelfMode && activeBoard?.id === board.id
                       ? "board-tab is-active"
                       : "board-tab"
                   }
+                  data-board-id={board.id}
                   onClick={() => {
                     setActiveBoardId(board.id);
                     setFrequentMode(false);
@@ -1219,7 +1364,7 @@ function App() {
                   <span>{board.name}</span>
                   {index < 9 ? <kbd>{index + 1}</kbd> : null}
                 </button>
-                {editMode && (
+                {editMode && personalShelfMode && (
                   <span className="board-reorder-controls">
                     <button
                       aria-label={`${board.name} ←`}
@@ -1310,7 +1455,9 @@ function App() {
             </button>
             <button
               className={editMode ? "is-active" : ""}
-              disabled={frequentMode || customMode}
+              disabled={
+                frequentMode || customMode || (catalogMode && !editMode)
+              }
               onClick={() => setEditMode((editing) => !editing)}
               type="button"
             >
@@ -1318,7 +1465,7 @@ function App() {
                 ? translate(locale, "finishEditing")
                 : translate(locale, "editShelf")}
             </button>
-            {editMode && !frequentMode && !customMode && activeBoard ? (
+            {editMode && personalShelfMode && activeBoard ? (
               <button
                 aria-label={translate(locale, "actions")}
                 className="icon-button"
@@ -1331,7 +1478,7 @@ function App() {
           </div>
         </div>
 
-        {actionMenuOpen && activeBoard ? (
+        {actionMenuOpen && personalShelfMode && activeBoard ? (
           <div className="action-popover board-actions" role="menu">
             <button
               onClick={() => {
@@ -1381,7 +1528,9 @@ function App() {
           </nav>
         ) : null}
 
-        <section className="content-split">
+        <section
+          className={`content-split ${detailsOpen || editMode ? "has-details" : "shelf-focused"}`}
+        >
           <div className="main-panel">
             <header className="panel-label">
               <div>
@@ -1472,6 +1621,9 @@ function App() {
                 editMode={editMode && !frequentMode}
                 items={displayedShelfItems}
                 locale={locale}
+                onFocusItem={(item) =>
+                  setSelection(selectionFromItem(item, locale))
+                }
                 onRemove={(itemId) => {
                   if (activeBoard && !frequentMode) {
                     useShelfStore
@@ -1519,176 +1671,189 @@ function App() {
             )}
           </div>
 
-          <aside className="detail-panel">
-            {selection ? (
-              <>
-                <div className="detail-artwork">
-                  {selection.itemType === "image" && selection.assetId ? (
-                    <CustomAssetArtwork
-                      assetId={selection.assetId}
-                      className="detail-emoji custom-detail-image"
-                    />
-                  ) : (
-                    <EmojiArtwork
-                      className="detail-emoji"
-                      emoji={selection.payload}
-                      hexcode={selection.hexcode}
-                      locale={locale}
-                      renderer={settings.renderer}
-                    />
-                  )}
-                </div>
-                <h2>{selection.name}</h2>
-                {selection.shortcode ? (
-                  <code>:{selection.shortcode}:</code>
-                ) : null}
-                <dl className="detail-list">
-                  <div>
-                    <dt>{locale === "ja" ? "カテゴリ" : "Category"}</dt>
-                    <dd>{selection.category ?? "—"}</dd>
+          {detailsOpen || editMode ? (
+            <aside className="detail-panel" id="selection-details">
+              {selection ? (
+                <>
+                  <div className="detail-artwork">
+                    {selection.itemType === "image" && selection.assetId ? (
+                      <CustomAssetArtwork
+                        assetId={selection.assetId}
+                        className="detail-emoji custom-detail-image"
+                      />
+                    ) : (
+                      <EmojiArtwork
+                        className="detail-emoji"
+                        emoji={selection.payload}
+                        hexcode={selection.hexcode}
+                        locale={locale}
+                        renderer={settings.renderer}
+                      />
+                    )}
                   </div>
-                  <div>
-                    <dt>Unicode</dt>
-                    <dd>
-                      {selection.itemType === "image"
-                        ? locale === "ja"
-                          ? "ローカル画像"
-                          : "Local image"
-                        : (selection.codepoint ?? "—")}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{locale === "ja" ? "キーワード" : "Keywords"}</dt>
-                    <dd>{selection.keywords.slice(0, 4).join(", ") || "—"}</dd>
-                  </div>
-                  {selection.useCount !== undefined ? (
+                  <h2>{selection.name}</h2>
+                  {selection.shortcode ? (
+                    <code>:{selection.shortcode}:</code>
+                  ) : null}
+                  <dl className="detail-list">
                     <div>
-                      <dt>{translate(locale, "usageCount")}</dt>
-                      <dd>{selection.useCount}</dd>
+                      <dt>{locale === "ja" ? "カテゴリ" : "Category"}</dt>
+                      <dd>{selection.category ?? "—"}</dd>
                     </div>
-                  ) : null}
-                </dl>
-                <div className="detail-actions">
-                  {selection.itemType !== "image" ? (
-                    <button
-                      className="compose-action"
-                      onClick={() => addPayloadToComposition(selection.payload)}
-                      type="button"
-                    >
-                      ✦ {translate(locale, "addToCompose")}
-                    </button>
-                  ) : null}
-                  {selection.itemType === "image" && selection.assetId ? (
-                    <>
+                    <div>
+                      <dt>Unicode</dt>
+                      <dd>
+                        {selection.itemType === "image"
+                          ? locale === "ja"
+                            ? "ローカル画像"
+                            : "Local image"
+                          : (selection.codepoint ?? "—")}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{locale === "ja" ? "キーワード" : "Keywords"}</dt>
+                      <dd>
+                        {selection.keywords.slice(0, 4).join(", ") || "—"}
+                      </dd>
+                    </div>
+                    {selection.useCount !== undefined ? (
+                      <div>
+                        <dt>{translate(locale, "usageCount")}</dt>
+                        <dd>{selection.useCount}</dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                  <div className="detail-actions">
+                    {selection.itemType !== "image" ? (
                       <button
-                        className="quiet-button"
+                        className="compose-action"
                         onClick={() =>
-                          void copyCustomAsset(selection.assetId ?? "").then(
-                            () => showToast(translate(locale, "copied")),
-                          )
+                          addPayloadToComposition(selection.payload)
                         }
                         type="button"
                       >
-                        {locale === "ja" ? "画像をコピー" : "Copy image"}
+                        ✦ {translate(locale, "addToCompose")}
                       </button>
+                    ) : null}
+                    {selection.itemType === "image" && selection.assetId ? (
+                      <>
+                        <button
+                          className="quiet-button"
+                          onClick={() =>
+                            void copyCustomAsset(selection.assetId ?? "").then(
+                              () => showToast(translate(locale, "copied")),
+                              () =>
+                                reportInsertion({
+                                  status: "failed",
+                                  reason: "clipboard-unavailable",
+                                }),
+                            )
+                          }
+                          type="button"
+                        >
+                          {locale === "ja" ? "画像をコピー" : "Copy image"}
+                        </button>
+                        <button
+                          className="quiet-button"
+                          onPointerDown={() =>
+                            void startAssetDrag(selection.assetId ?? "")
+                          }
+                          type="button"
+                        >
+                          {locale === "ja" ? "外へドラッグ" : "Drag out"}
+                        </button>
+                      </>
+                    ) : null}
+                    {selection.source === "shelf" &&
+                    selection.itemType === "sequence" ? (
                       <button
                         className="quiet-button"
-                        onPointerDown={() =>
-                          void startAssetDrag(selection.assetId ?? "")
-                        }
+                        onClick={openEditSequence}
                         type="button"
                       >
-                        {locale === "ja" ? "外へドラッグ" : "Drag out"}
+                        {translate(locale, "editSequence")}
                       </button>
-                    </>
-                  ) : null}
-                  {selection.source === "shelf" &&
-                  selection.itemType === "sequence" ? (
-                    <button
-                      className="quiet-button"
-                      onClick={openEditSequence}
-                      type="button"
-                    >
-                      {translate(locale, "editSequence")}
-                    </button>
-                  ) : null}
-                  {(selection.source === "catalog" ||
-                    selection.source === "library") &&
-                  activeBoard ? (
-                    <button
-                      className="shelf-action"
-                      onClick={() => addSelectionToBoard(activeBoard.id)}
-                      type="button"
-                    >
-                      <span aria-hidden="true">★</span>
-                      {translate(locale, "addToShelf")}
-                    </button>
-                  ) : null}
-                  {selection.source === "shelf" && editMode && !frequentMode ? (
-                    <button
-                      className="danger-quiet"
-                      onClick={removeSelection}
-                      type="button"
-                    >
-                      {translate(locale, "removeFromShelf")}
-                    </button>
-                  ) : null}
-                  {boards.length > 1 && !frequentMode ? (
-                    <label className="board-target-field">
-                      <span>
-                        {selection.source === "shelf"
-                          ? translate(locale, "moveTo")
-                          : translate(locale, "copyTo")}
-                      </span>
-                      <select
-                        defaultValue=""
-                        onChange={(event) => {
-                          const targetId = event.target.value;
-                          if (!targetId || !activeBoard) {
-                            return;
-                          }
-                          if (
-                            selection.source === "shelf" &&
-                            selection.itemId
-                          ) {
-                            useShelfStore
-                              .getState()
-                              .moveItemToBoard(
-                                activeBoard.id,
-                                targetId,
-                                selection.itemId,
-                              );
-                            setSelection(undefined);
-                          } else {
-                            addSelectionToBoard(targetId);
-                          }
-                          event.target.value = "";
-                        }}
+                    ) : null}
+                    {(selection.source === "catalog" ||
+                      selection.source === "library") &&
+                    activeBoard ? (
+                      <button
+                        className="shelf-action"
+                        onClick={() => addSelectionToBoard(activeBoard.id)}
+                        type="button"
                       >
-                        <option value="">—</option>
-                        {boards
-                          .filter((board) => board.id !== activeBoard?.id)
-                          .map((board) => (
-                            <option key={board.id} value={board.id}>
-                              {board.icon} {board.name}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                  ) : null}
+                        <span aria-hidden="true">★</span>
+                        {translate(locale, "addToShelf")}
+                      </button>
+                    ) : null}
+                    {selection.source === "shelf" &&
+                    editMode &&
+                    !frequentMode ? (
+                      <button
+                        className="danger-quiet"
+                        onClick={removeSelection}
+                        type="button"
+                      >
+                        {translate(locale, "removeFromShelf")}
+                      </button>
+                    ) : null}
+                    {boards.length > 1 && !frequentMode ? (
+                      <label className="board-target-field">
+                        <span>
+                          {selection.source === "shelf"
+                            ? translate(locale, "moveTo")
+                            : translate(locale, "copyTo")}
+                        </span>
+                        <select
+                          defaultValue=""
+                          onChange={(event) => {
+                            const targetId = event.target.value;
+                            if (!targetId || !activeBoard) {
+                              return;
+                            }
+                            if (
+                              selection.source === "shelf" &&
+                              selection.itemId
+                            ) {
+                              useShelfStore
+                                .getState()
+                                .moveItemToBoard(
+                                  activeBoard.id,
+                                  targetId,
+                                  selection.itemId,
+                                );
+                              setSelection(undefined);
+                            } else {
+                              addSelectionToBoard(targetId);
+                            }
+                            event.target.value = "";
+                          }}
+                        >
+                          <option value="">—</option>
+                          {boards
+                            .filter((board) => board.id !== activeBoard?.id)
+                            .map((board) => (
+                              <option key={board.id} value={board.id}>
+                                {board.icon} {board.name}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <div className="detail-placeholder">
+                  <span aria-hidden="true">☝</span>
+                  <p>
+                    {locale === "ja"
+                      ? "絵文字を選ぶと、ここに詳しい情報を表示します。"
+                      : "Select an emoji to see its details."}
+                  </p>
                 </div>
-              </>
-            ) : (
-              <div className="detail-placeholder">
-                <span aria-hidden="true">☝</span>
-                <p>
-                  {locale === "ja"
-                    ? "絵文字を選ぶと、ここに詳しい情報を表示します。"
-                    : "Select an emoji to see its details."}
-                </p>
-              </div>
-            )}
-          </aside>
+              )}
+            </aside>
+          ) : null}
         </section>
 
         {composeOpen ? (
@@ -1700,7 +1865,12 @@ function App() {
             onCopy={() =>
               void copyPayload(composition.join(""))
                 .then(() => showToast(translate(locale, "copied")))
-                .catch((error) => showToast(String(error)))
+                .catch(() =>
+                  reportInsertion({
+                    status: "failed",
+                    reason: "clipboard-unavailable",
+                  }),
+                )
             }
             onPaste={() => void pasteComposition()}
             onSave={openSaveSequence}
@@ -1731,6 +1901,16 @@ function App() {
               </span>
             )}
           </div>
+          <button
+            type="button"
+            className="quiet-button"
+            aria-expanded={detailsOpen || editMode}
+            aria-controls="selection-details"
+            onClick={() => setDetailsOpen((value) => !value)}
+            disabled={editMode}
+          >
+            {locale === "ja" ? "詳細" : "Details"}
+          </button>
           <div className="shortcut-hints">
             <span>
               <kbd>Enter</kbd>
@@ -1758,7 +1938,21 @@ function App() {
             : translate(locale, "ready")}
         </div>
         <span>•</span>
-        <span>{translate(locale, "freeOpenSource")}</span>
+        <span>
+          {settings.selectionBehavior === "copy-only"
+            ? translate(locale, "copyOnly")
+            : editMode
+              ? translate(locale, "editShelf")
+              : detailsOpen
+                ? locale === "ja"
+                  ? "詳細確認中：クリックで選択"
+                  : "Inspect: click to select"
+                : composeOpen
+                  ? "Compose"
+                  : locale === "ja"
+                    ? "クリック・Enterで貼り付け"
+                    : "Click or Enter to paste"}
+        </span>
         <span className="utility-spacer" />
         <span className="renderer-label">
           {settings.renderer === "twemoji"
@@ -1767,6 +1961,13 @@ function App() {
               ? "Native emoji"
               : (activeRendererPack?.attribution ?? "Twemoji fallback")}
         </span>
+        <button
+          className="quiet-button"
+          type="button"
+          onClick={() => setModal("practice")}
+        >
+          {locale === "ja" ? "使い方" : "How to use"}
+        </button>
         <button
           aria-label={translate(locale, "settings")}
           className="settings-button"
@@ -1777,6 +1978,14 @@ function App() {
         </button>
       </footer>
 
+      {modal === "practice" ? (
+        <ModalShell
+          onClose={() => setModal(null)}
+          title={locale === "ja" ? "使い方" : "How to use"}
+        >
+          <PracticePanel locale={locale} shortcut={settings.globalShortcut} />
+        </ModalShell>
+      ) : null}
       {modal === "new-board" ? (
         <ModalShell
           onClose={() => setModal(null)}
@@ -2050,39 +2259,43 @@ function App() {
                 value={settings.renderer}
               >
                 <option value="twemoji">Twemoji</option>
-                <option value="native">Native / System</option>
-                <option
-                  disabled={
-                    !rendererPacks.some(
-                      (pack) => pack.rendererId === "fluent" && pack.enabled,
-                    )
-                  }
-                  value="fluent"
-                >
-                  Fluent Emoji
+                <option value="native">
+                  {locale === "ja"
+                    ? "Native / System（OS標準）"
+                    : "Native / System (OS default)"}
                 </option>
-                <option
-                  disabled={
-                    !rendererPacks.some(
-                      (pack) => pack.rendererId === "noto" && pack.enabled,
-                    )
-                  }
-                  value="noto"
-                >
-                  Noto Emoji
-                </option>
-                <option
-                  disabled={
-                    !rendererPacks.some(
-                      (pack) => pack.rendererId === "openmoji" && pack.enabled,
-                    )
-                  }
-                  value="openmoji"
-                >
-                  OpenMoji
-                </option>
+                {(
+                  [
+                    ["fluent", "Fluent Emoji"],
+                    ["noto", "Noto Emoji"],
+                    ["openmoji", "OpenMoji"],
+                  ] as const
+                ).map(([id, label]) => {
+                  const pack = rendererPacks.find(
+                    (entry) => entry.rendererId === id,
+                  );
+                  const status = !pack
+                    ? locale === "ja"
+                      ? "パック未導入"
+                      : "Pack not installed"
+                    : !pack.enabled
+                      ? locale === "ja"
+                        ? "無効"
+                        : "Disabled"
+                      : "";
+                  return (
+                    <option disabled={!pack?.enabled} key={id} value={id}>
+                      {status ? `${label} — ${status}` : label}
+                    </option>
+                  );
+                })}
               </select>
             </label>
+            <p className="renderer-help">
+              {locale === "ja"
+                ? "ここで変わるのはEmoShelf内の見た目です。貼り付け先では、そのアプリの絵文字で表示されます。Fluent・Noto・OpenMojiには追加パックが必要です。"
+                : "This changes emoji inside EmoShelf. Pasted text uses the destination app’s emoji style. Fluent, Noto and OpenMoji require an additional pack."}
+            </p>
             <details className="renderer-attributions">
               <summary>{translate(locale, "rendererAttributions")}</summary>
               <ul>
@@ -2470,13 +2683,10 @@ function App() {
                 </p>
               ) : null}
             </section>
-            <section
-              aria-labelledby="performance-settings-title"
-              className="settings-section"
-            >
-              <h3 id="performance-settings-title">
+            <details className="settings-section advanced-settings">
+              <summary id="performance-settings-title">
                 {translate(locale, "diagnostics")}
-              </h3>
+              </summary>
               <dl className="performance-metrics">
                 <div>
                   <dt>{translate(locale, "startupMetric")}</dt>
@@ -2518,7 +2728,7 @@ function App() {
               >
                 {translate(locale, "refreshDiagnostics")}
               </button>
-            </section>
+            </details>
             <div className="settings-danger-zone">
               <button
                 className="quiet-button"

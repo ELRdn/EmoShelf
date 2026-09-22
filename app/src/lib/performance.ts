@@ -7,6 +7,7 @@ export interface ClientPerformanceSnapshot {
 
 const startedAt = performance.now();
 const searchSamples: number[] = [];
+let searchStarted: number | undefined;
 let startupToReadyMs: number | undefined;
 
 function p95(values: readonly number[]): number | undefined {
@@ -25,14 +26,14 @@ export function recordCatalogReady(): void {
   startupToReadyMs ??= performance.now() - startedAt;
 }
 
-export function measureCatalogSearch<T>(operation: () => T): T {
-  const started = performance.now();
-  const value = operation();
-  searchSamples.push(performance.now() - started);
-  if (searchSamples.length > 100) {
-    searchSamples.shift();
-  }
-  return value;
+export function beginSearchFrame(): void {
+  searchStarted = performance.now();
+}
+export function finishSearchFrame(): void {
+  if (searchStarted === undefined) return;
+  searchSamples.push(performance.now() - searchStarted);
+  searchStarted = undefined;
+  if (searchSamples.length > 100) searchSamples.shift();
 }
 
 export function getClientPerformanceSnapshot(): ClientPerformanceSnapshot {

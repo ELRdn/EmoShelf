@@ -30,6 +30,7 @@ export function CustomAssetGrid({
           <li className="custom-asset-card" key={asset.id}>
             <button
               aria-label={label}
+              data-asset-id={asset.id}
               className={selectedId === asset.id ? "is-selected" : ""}
               onClick={() => onSelect(asset)}
               type="button"

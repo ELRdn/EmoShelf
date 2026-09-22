@@ -29,6 +29,7 @@ interface ShelfGridProps {
   shelfGlow?: boolean;
   selectedId?: string;
   onSelect: (item: ShelfItem) => void;
+  onFocusItem?: (item: ShelfItem) => void;
   onRemove: (itemId: string) => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
 }
@@ -121,6 +122,7 @@ export function ShelfGrid({
   shelfGlow = false,
   selectedId,
   onSelect,
+  onFocusItem,
   onRemove,
   onReorder,
 }: ShelfGridProps) {
@@ -180,8 +182,10 @@ export function ShelfGrid({
           <li key={item.id}>
             <button
               aria-label={item.display.name}
+              data-shelf-item-id={item.id}
               className={`emoji-tile shelf-tile${selectedId === item.id ? " is-selected" : ""}${glowClass(item, shelfGlow)}`}
               onClick={() => onSelect(item)}
+              onFocus={() => onFocusItem?.(item)}
               title={item.display.name}
               type="button"
             >

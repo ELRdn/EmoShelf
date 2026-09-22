@@ -4,12 +4,17 @@ EmoShelf 本体の Tauri 2 + React + TypeScript プロジェクト。
 製品概要はルートの [`README.md`](../README.md)、
 画面仕様は [`DESIGN.md`](../DESIGN.md)、全体計画は [`ROADMAP.md`](../ROADMAP.md) を参照。
 
-Concept 2.5準拠のShelf UI、Compose Tray、sequence、キーボード操作、
-`.emoshelf` Import/Export、アプリ別Board、Frequent、Tray、Autostart、
-カスタム画像、署名付きRenderer Pack管理まで実装済みです。
-v0.5では復旧通知、設定バックアップ、明示同意型Updater、アクセシビリティ監査、
-性能診断、500KiB JavaScript bundle gateも追加しました。v1.0 Release Candidateでは正式アイコン、
-実Tauri E2E、署名済みx64／ARM64配布パイプライン、Renderer Pack生成・署名検証、公開文書を整備しています。
+2026-09-22時点では、Alt+Eの再呼び出し・入力先復帰、Pinned、保存完了待ちを改善し、
+左端のAll、Native絵文字の中央配置、追加スタイルの未導入表示を実装しています。
+既存のBoard・設定・画像とschema v2を保持します。
+
+最新のローカル検証はフロント84件・補助ツール7件・Rust71件・デスクトップE2E10件。
+各結果が適用される実行ファイルと実機確認範囲は[`docs/release-qualification.md`](docs/release-qualification.md)を参照。
+公開済みRC 1には今回の改善は含まれません。ローカル候補は未署名で、正式公開条件は未達です。
+
+絵文字スタイルはTwemoji同梱＋OS標準を基本とし、Fluent・Noto・OpenMojiを
+GitHub Releasesの追加パックで配る方針です。署名検証付きのファイル読込は実装済みですが、
+Pack公開・製品用の鍵設定・アプリ内ダウンロードは残っています。
 
 ## 前提ツール
 
@@ -28,13 +33,14 @@ Tauri 公式の前提条件: https://tauri.app/start/prerequisites/
 cd app
 
 pnpm install --frozen-lockfile # lockfile固定で依存インストール
-pnpm dev         # Vite のみ起動（UI 確認用）
+pnpm dev         # Vite資源サーバーのみ。本体画面はTauri IPCが必要
 pnpm tauri dev   # デスクトップアプリとして起動
 pnpm check       # 型チェック + Biome + Vitest/RTL/axe + Node release tests
 pnpm test        # Vitest/RTL/axe + Node release tests
 pnpm build       # 本番フロントビルド
 pnpm test:e2e    # 実Tauri/WebView2をWebDriverIOで検証
 pnpm release:audit # バージョン・文書・CI・鍵混入・追跡生成物を監査
+pnpm build:acceptance # データを分離した未署名のローカル検証用EXE
 pnpm tauri build # Windows インストーラー（NSIS / MSI）を生成
 ```
 
@@ -63,6 +69,7 @@ app/
 │       ├── performance.ts # 起動・検索・JS heap計測
 │       ├── updates.ts # 確認と明示同意後の更新適用を分離
 │       ├── paste.ts   # ペースト実行＋コピーフォールバック
+│       ├── useDesktopLifecycle.ts # 表示後の選択フォーカスと終了時の保存待ち
 │       ├── transfer.ts # .emoshelf交換と安全なMerge
 │       ├── customAssets.ts # カスタム画像IPC
 │       ├── rendererPacks.ts # 署名付きPack IPC
@@ -72,6 +79,8 @@ app/
 │   └── updater.md     # 更新同意・署名鍵・公開条件
 ├── src-tauri/
 │   ├── src/lib.rs       # Rust 基盤（保存/ペースト/前面アプリ/monitor/Tray）
+│   ├── src/activation.rs # 復元・表示・前面化・topmost解除
+│   ├── src/desktop.rs    # 入力先検証・clipboard競合・入力送出結果
 │   ├── src/custom_assets.rs # 画像検証・PNG正規化・ローカル保存
 │   ├── src/renderer_packs.rs # 署名・hash・互換性検証とPack管理
 │   ├── tauri.conf.json  # カスタムフレーム・ウィンドウ・バンドル設定
@@ -101,7 +110,7 @@ app/
 | `updater_available` | 署名検証鍵を持つ正式Updaterビルドか判定 |
 | `get_performance_snapshot` | ホットキー表示要求のsample数とp95を取得 |
 | `set_global_shortcut` | グローバルショートカット差し替え |
-| `paste_payload` | クリップボード書き込み → 対象へフォーカス復帰 → Ctrl+V |
+| `paste_payload` | コピー、入力先・フォーカス・clipboard競合を検証し、`input-sent`／`copied`／`failed`と理由を返す |
 | `export_emoshelf` | schema v2状態を検証して`.emoshelf` ZIPへ保存 |
 | `preview_emoshelf` | ZIPを安全に検証し、適用前プレビューを返す |
 | `install_emoshelf_assets` | 検証済み`.emoshelf`内画像をアトミックに導入 |
@@ -109,7 +118,7 @@ app/
 | `read_custom_asset` | hashを再検証してローカル画像を読み出す |
 | `remove_custom_asset` | Board参照を検査して未参照画像だけを削除 |
 | `copy_image_asset` | 画像をWindows clipboardへ書き込む |
-| `paste_image_asset` | clipboard書込後、対象アプリへフォーカスを戻してCtrl+V |
+| `paste_image_asset` | 画像コピー後、文字と同じ入力先検証と構造化結果で貼り付ける |
 | `drag_image_asset` | Windows OLEで画像ファイルを外部へcopy-onlyドラッグ |
 | `list_renderer_packs` | 有効な署名付きPackとライセンス情報を列挙 |
 | `install_renderer_pack` | Packの署名・hash・互換性・ZIP構造を検証して導入 |
@@ -121,12 +130,13 @@ app/
 | `get_autostart` | Windows Autostartの実状態を取得 |
 | `set_autostart` | Windows Autostartを有効化／無効化 |
 
-使用プラグイン: `global-shortcut`（表示切替）・`clipboard-manager`（書き込み）・
+使用プラグイン: `global-shortcut`（常に前面へ呼び出し）・`clipboard-manager`（書き込み）・
 `dialog`（Import/Export先の選択）・`single-instance`（二重起動抑止）・
 `window-state`（サイズ/位置の自動復元）・`autostart`（Windowsサインイン時起動）。
 Autostart時はウィンドウを出さずTrayで待機する。Trayの左クリックまたはメニューから
 再表示でき、閉じるボタンは終了せずTrayへ格納する。
-ペーストのキー送出には `enigo` を使用。
+Windowsのキー送出は`SendInput`を使用。`input-sent`はOSがキー入力を受理した意味で、
+相手アプリの文書へ実際に挿入されたことの証明ではありません。
 
 ## 品質・Updater
 
@@ -153,6 +163,8 @@ EMOSHELF_UPDATER_PUBLIC_KEY
 - 正規化PNGのSHA-256をIDとファイル名に使い、`appLocalData/custom-assets/`へ保存する。
   元ファイル名と外部パスは永続化しない。
 - Renderer Pack仕様は[`docs/renderer-packs.md`](docs/renderer-packs.md)を参照。
+- 現在は手元のPackファイルを選んで導入する方式です。設定内の見本・ダウンロード・
+  更新導線は次の実装対象で、配布済み機能として案内しないでください。
 - 本番Packを受理するビルドでは、公開鍵だけを次の環境変数でコンパイル時に設定する。
   秘密鍵とパスワードはリポジトリへ置かない。
 
@@ -163,3 +175,10 @@ EMOSHELF_RENDERER_PUBLIC_KEY_BASE64
 
 Twemojiの帰属とライセンスはルートの
 [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) を参照。
+
+## 表示・外部入力の検証用フィクスチャ
+
+`pnpm dev`で起動する`http://localhost:1420/tools/fixtures/emoji-alignment.html`は、
+実際の`EmojiArtwork`とCSSを使い、Native絵文字を4サイズで比較する開発専用画面です。
+`tools/fixtures/input-target.html`は外部入力確認用の空の入力欄で、
+外部アプリへの自動回帰ランナー自体はまだ実装されていません。

@@ -420,4 +420,29 @@ describe("shelf store", () => {
     expect(useShelfStore.getState().customAssets).toEqual({});
     expect(useShelfStore.getState().recent).toEqual([]);
   });
+  it("serializes pending disk writes before an explicit final save", async () => {
+    let finishFirst!: () => void;
+    mockedInvoke
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishFirst = resolve;
+          }),
+      )
+      .mockResolvedValue(undefined);
+    useShelfStore.setState({ boards: [board("a", "Before", 0)] });
+    useShelfStore.getState().renameBoard("a", "First");
+    await vi.advanceTimersByTimeAsync(350);
+    useShelfStore.getState().renameBoard("a", "Latest");
+    const finalSave = useShelfStore.getState().persistNow();
+    await Promise.resolve();
+    expect(mockedInvoke).toHaveBeenCalledTimes(1);
+    finishFirst();
+    await finalSave;
+    expect(mockedInvoke).toHaveBeenCalledTimes(2);
+    const saved = JSON.parse(
+      (mockedInvoke.mock.calls[1][1] as { content: string }).content,
+    );
+    expect(saved.boards[0].name).toBe("Latest");
+  });
 });

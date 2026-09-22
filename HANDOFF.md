@@ -1,7 +1,40 @@
 # EmoShelf 引き継ぎ書
 
-> 最終更新: 2026-09-05（基礎構築: DSH / Scarlet 🦊、Phase 0〜v1.0 Release Candidate: Cyan/Codex）
+> **2026-09-22 現段階の実装と配布方針を更新**：この下の旧完了記録を正式公開の承認に使わないこと。
+> 呼び出しの前面化、ウィンドウ操作権限、選択フォーカス、Pinnedの重なり順を修正。メモ帳6回の確認はAll追加前のAlt+E修正版の証跡。
+> 左端のAllに加え、Native絵文字の中央配置と追加スタイルの未導入表示を修正。最新のフロント84・E2E10件、および直前のネイティブ変更で実施したRust71件の検証範囲と、未確認の公開条件は
+> [`app/docs/release-qualification.md`](app/docs/release-qualification.md)を参照。
+> 署名、全互換性マトリクス、5営業日の実利用は未完了。
+
+> 最終更新: 2026-09-22（基礎構築: DSH / Scarlet 🦊、Release Candidateと品質改善: Cyan/Codex）
 > このファイルは他エージェントへの引き継ぎ用。作業開始前にここから読むこと。
+
+## 現在の正本（2026-09-22）
+
+- Alt+Eは常に前面へ表示する。非表示・背面・最小化から共通処理で復帰し、
+  前面化を確認してから選択フォーカスを戻す。閉じる操作はEscape／閉じるボタン。
+- `activation.rs`が表示・復元・topmost解除、`desktop.rs`が入力先・フォーカス・
+  clipboard競合の検査とWindows `SendInput`を担当。Pinnedでも入力先を覆わない。
+- 左端のAllは保存されるBoardではなく、全1949件を開く入口。再クリックで検索・
+  カテゴリをリセットし、元のBoardとCtrl+1〜9の割り当てを保つ。
+- Native文字の中央配置を4サイズで検証。未導入・無効な絵文字スタイルを明記した。
+- 保存は直列化し、Quit／更新前に完了を待つ。入力結果は`input-sent`／`copied`／`failed`。
+- 最新ローカルEXEは未署名x64、WebDriverなし。SHA-256は
+  `9cacd0a66be16d1d2e978ed42cc4b00c68c9b381838541c7489d631b49039921`。
+  これはコミット前の作業ツリーから作成した検証物で、正式な配布候補の固定とは別。
+- フロント84、補助ツール7、デスクトップE2E10、直前のネイティブ変更でRust71が通過。
+  実機のメモ帳6回は**以前のAlt+E修正版**の証跡。最新EXE全体の外部入力合格と扱わない。
+  Ctrl+1の実機操作はヘルパーで確認できず、手動検証が残る。
+- ローカルEXE・バックアップ・ログは`app/logs/`で保持し、Gitへ追加しない。
+  公開用のコード・テスト・記録はコミットするが、公開済みRC 1の内容は変わらない。
+
+### 次の実装：追加の絵文字スタイル
+
+ユーザー合意済みの方針は**Twemoji同梱＋OS標準、Fluent・Noto・OpenMojiはGitHub Releases配布**。
+設定内で見本を選び、ダウンロードから導入まで完結し、導入後はオフラインで使える形にする。
+現在あるのは署名検証とローカルファイル読込で、パックの製品配布・製品用の鍵設定・
+アプリ内ダウンロードは未完了。詳細と受け入れ条件は[`app/docs/renderer-packs.md`](app/docs/renderer-packs.md)。
+このコミット作業では方針を記録し、ダウンロード機能や公開リリースを実装・実行しない。
 
 ## 0. 読み順（5分コース）
 
@@ -21,7 +54,9 @@
 - リポジトリ構成: ドキュメント類はルート直下、アプリ本体は **`app/` サブディレクトリ**
   （ルートの製品 README を Tauri テンプレに上書きさせないための意図的配置。変更しないこと）
 
-## 2. 現状サマリ
+## 2. 基礎構築〜旧RCの実装記録（2026-09-05）
+
+以下の版・件数・計測値は当時の記録。現在の挙動・件数・公開判断は冒頭と検証記録を優先する。
 
 ### 完了済み
 
@@ -87,13 +122,14 @@
   再起動後のホットキーsampleは1件のため、10件以上のp95証跡はv1.0手動ゲートへ継続
 - `ROADMAP.md` のPhase 0〜v1.0チェックボックスは受け入れ結果へ同期済み
 
-### 次の作業
+### 現在の残作業
 
-- PRの全CI成功後、v1.0 Release Candidateを`main`へマージする
-- v0.4残件: Explorer／画像対応アプリへのOLE実ドロップを、同一ユーザーデスクトップ上で手動確認
-- v0.5残件: Narrator、大文字、125%／150%／200%、高DPI、120/144Hz以上、ホットキー10 sample p95
-- SignPath Foundationの本人確認・MFA・申請承認、鍵／GitHub Secrets設定、private→public変更、
-  `production-signing`承認後に限り、署名済み`v1.0.0` workflowを実行する
+- 追加の絵文字スタイルの作成・署名・配布と、アプリ内導入フロー
+- 外部アプリごとのクリック30回／Enter30回、画像貼り付け・ExplorerへのOLE実ドロップ
+- Narrator、キーボード／IME、100/125/150/200%、複数モニター、性能の実機受け入れ
+- 同一の配布候補で5営業日の実利用、x64／ARM64の署名済みinstaller/update/uninstallと復旧確認
+- SignPathの承認状況と鍵設定を実施時に確認し、workflowで**未公開ドラフト**を作成。
+  検証完了と公開承認を経て同じ配布物を公開する。コードのpushは正式公開の承認ではない。
 
 ## 3. 主要ファイル
 
@@ -161,7 +197,7 @@ cargo check --locked
 
 1. **Rust はローカル検証済み**: `cargo fmt --check`、警告をエラー扱いした Clippy、
    単体テスト、`cargo check --locked` を各PRの完了条件とする。
-   永続化・ショートカット・交換形式・前面アプリ・画像・Pack境界に Rust 単体テスト 64 件がある。
+   永続化・ショートカット・交換形式・前面アプリ・画像・Pack境界に Rust 単体テスト 71 件がある。
 2. **`Cargo.lock` は同期・コミット必須**: `Cargo.toml` の全直接依存を含む状態で管理し、
    CI でも `--locked` を指定して意図しない依存更新を拒否する。
 3. **esbuild の postinstall を無効化している**（`app/.npmrc` の `never-built-dependencies`）:
@@ -177,7 +213,7 @@ cargo check --locked
    書き込みが EPERM になる。回避には `$env:TEMP` 配下へのリダイレクト
    （`XDG_CACHE_HOME`、`--store-dir`）を使うこと。通常環境では不要。
 7. **JavaScript bundle gate**: 日英emojibaseは静的JSONへ分離済み。`pnpm build`は
-   500KiBを超えるJavaScript chunkがあれば失敗する。現状の最大chunkは約457.28kB。
+   500KiBを超えるJavaScript chunkがあれば失敗する。最新の大きさはビルド結果で確認する。
 8. **外部Renderer**: Fluent/Noto/OpenMojiは未同梱。v0.4で署名・ハッシュ検証付き
    Renderer Pack管理を実装済みだが、`EMOSHELF_RENDERER_KEY_ID`と
    `EMOSHELF_RENDERER_PUBLIC_KEY_BASE64`をビルド時に設定しない限りfail-closedで無効になる。
@@ -203,15 +239,15 @@ cargo check --locked
 | 保存方式 | 自前 `state.json`（Rust コマンド） | アトミック保存・`.bak` 復旧を明示的に制御するため。`tauri-plugin-store` は不採用 |
 | 整形・lint | Biome（ESLint/Prettier 不使用） | 高速・単一ツール |
 | ショートカット登録 | Rust が所有、フロントは設定値の通知のみ | 二重登録・競合の単一管理点化 |
-| ペースト方式 | クリップボード＋enigo の Ctrl+V | 標準的構成。失敗時は Copy only に自動フォールバック |
+| ペースト方式 | clipboard＋Windows `SendInput` | 入力先・フォーカス・clipboard競合を検査し、失敗時はコピーとCtrl+V案内を保持 |
 
-## 7. 次の作業の推奨順序（v1.0）
+## 7. 次の作業の推奨順序（v1.0、2026-09-22更新）
 
-1. 参照画から正式アイコンmasterを生成し、小サイズ視認性とTauri icon一式を確認
-2. README／Privacy／Attributions／Contributing／Security／Issue導線／Release Notesを完成
-3. x64／ARM64、WebDriver、インストール／更新／アンインストール、署名検証CIを構築
-4. v0.4 OLE実ドロップとv0.5手動アクセシビリティ／DPI／高リフレッシュ残件を実機で受入
-5. 履歴・秘密情報・生成物・第三者ライセンスを監査し、外部ゲート完了後に署名済みv1.0.0を公開
+1. 追加パックの製品用署名・配布準備と、アプリ内スタイル導入フローを実装する
+2. 残っている外部入力・キーボード・画像・DPI・アクセシビリティの再現不具合を解消する
+3. SignPath・鍵・CIを確認し、同一コミットから署名済みドラフトを作る
+4. ドラフトの実配布物で全マトリクス、更新／復旧と5営業日の実利用を完了する
+5. 実物に一致する最終説明・スクリーンショットと公開承認を揃え、同じ配布物を公開する
 
 ## 8. 規約
 

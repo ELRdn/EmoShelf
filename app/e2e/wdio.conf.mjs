@@ -27,7 +27,10 @@ export const config = {
       "@wdio/tauri-service",
       {
         appBinaryPath: application,
-        driverProvider: "embedded",
+        // Shipping binaries intentionally omit the embedded automation plugin.
+        driverProvider: process.env.EMOSHELF_E2E_BINARY
+          ? "external"
+          : "embedded",
         embeddedPort: 4445,
         startTimeout: 120_000,
         statusPollTimeout: 10_000,

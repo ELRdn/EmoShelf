@@ -11,7 +11,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
@@ -21,7 +21,7 @@ use std::sync::atomic::{AtomicIsize, Ordering};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Emitter, Manager,
 };
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
 use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -29,7 +29,9 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
+mod activation;
 mod custom_assets;
+mod desktop;
 mod renderer_packs;
 
 #[cfg(windows)]
@@ -65,8 +67,8 @@ use windows::Win32::UI::Shell::{SHCreateDataObject, SHParseDisplayName};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
     CallWindowProcW, DefWindowProcW, GetClientRect, GetForegroundWindow, GetWindowThreadProcessId,
-    SetForegroundWindow, SetWindowLongPtrW, ShowWindowAsync, GWLP_WNDPROC, HTCLIENT, HTMAXBUTTON,
-    SW_SHOW, WM_NCHITTEST, WNDPROC,
+    PostMessageW, SetWindowLongPtrW, GWLP_WNDPROC, HTCLIENT, HTMAXBUTTON, WM_ACTIVATE, WM_APP,
+    WM_NCHITTEST, WNDPROC,
 };
 
 /// 状態ファイル名（appLocalData 直下に保存）。
@@ -77,12 +79,12 @@ const STATE_BACKUP_NAME: &str = "state.json.bak";
 const SETTINGS_BACKUP_NAME: &str = "settings-backup.json";
 /// 一時ファイルの拡張子（アトミック保存用）。
 const STATE_TMP_EXTENSION: &str = "json.tmp";
-/// ペースト前にフォーカス復帰を待つ時間。
-const PASTE_FOCUS_WAIT: Duration = Duration::from_millis(120);
 /// 既定のグローバルショートカット（設定読み込み前のフォールバック）。
 const DEFAULT_SHORTCUT: &str = "alt+e";
 /// Windowsサインイン時はUIを出さずTrayに待機する。
 const AUTOSTART_ARG: &str = "--autostart";
+#[cfg(windows)]
+const WM_RELEASE_SHELF_TOPMOST: u32 = WM_APP + 0x531;
 /// `.emoshelf` container format and supported application state versions.
 const EMOSHELF_FORMAT_VERSION: u32 = 1;
 const SUPPORTED_STATE_SCHEMA: u32 = 2;
@@ -134,9 +136,6 @@ struct ParsedEmoShelfBundle {
 /// 現在登録中のグローバルショートカット（差し替え時に解除するため保持）。
 struct ActiveShortcut(Mutex<Option<Shortcut>>);
 
-/// ショートカットを押す直前に前面だったウィンドウ。フルパスやタイトルは保持しない。
-struct PasteTarget(Mutex<Option<isize>>);
-
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ForegroundContext {
@@ -163,6 +162,8 @@ struct UpdaterAvailability(bool);
 
 /// グローバルショートカットのイベント受信からshow/focus要求完了までの直近計測。
 struct HotkeyPerformance(Mutex<VecDeque<f64>>);
+struct RevealTiming(Mutex<Option<(u64, Instant)>>);
+static REVEAL_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -203,11 +204,6 @@ fn percentile_95(values: &VecDeque<f64>) -> Option<f64> {
 
 #[cfg(windows)]
 static ORIGINAL_WNDPROC: AtomicIsize = AtomicIsize::new(0);
-
-#[cfg(windows)]
-fn hwnd_to_isize(hwnd: HWND) -> isize {
-    hwnd.0 as isize
-}
 
 #[cfg(windows)]
 fn isize_to_hwnd(value: isize) -> HWND {
@@ -321,9 +317,7 @@ fn remember_foreground_target(app: &tauri::AppHandle) {
     if foreground.is_invalid() || foreground == own_hwnd {
         return;
     }
-    if let Ok(mut guard) = app.state::<PasteTarget>().0.lock() {
-        *guard = Some(hwnd_to_isize(foreground));
-    }
+    desktop::capture(foreground);
     position_main_window_for_target(app, foreground);
     let per_app_enabled = app
         .state::<ContextPreferences>()
@@ -351,6 +345,23 @@ unsafe extern "system" fn snap_window_proc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
+    if message == WM_ACTIVATE {
+        if wparam.0 & 0xffff != 0 {
+            desktop::capture(isize_to_hwnd(lparam.0));
+        } else {
+            // Tao can hold its window-state lock during minimize/show. Changing
+            // z-order inside WM_ACTIVATE can re-enter its WndProc under that lock.
+            // Post instead; recheck foreground when the queued message arrives.
+            let _ =
+                unsafe { PostMessageW(Some(hwnd), WM_RELEASE_SHELF_TOPMOST, WPARAM(0), LPARAM(0)) };
+        }
+    }
+    if message == WM_RELEASE_SHELF_TOPMOST {
+        if unsafe { GetForegroundWindow() } != hwnd {
+            activation::release(hwnd);
+        }
+        return LRESULT(0);
+    }
     let previous = ORIGINAL_WNDPROC.load(Ordering::Relaxed);
     let base_result = if previous == 0 {
         // SAFETY: The values are passed through unchanged from Windows.
@@ -412,53 +423,82 @@ fn install_snap_layout_hit_test(_window: &tauri::Window) -> Result<(), String> {
     Ok(())
 }
 
-/// メインウィンドウの表示 / 非表示を切り替える。
-fn toggle_main_window(app: &tauri::AppHandle) {
-    let Some(window) = app.get_webview_window("main") else {
-        return;
-    };
-    let visible = window.is_visible().unwrap_or(false);
-    if visible {
-        let _ = window.hide();
-    } else {
-        remember_foreground_target(app);
-        // 「表示 p95」はホットキーからネイティブ表示要求が完了するまでを測る。
-        // フォーカス移動は表示後の別処理なので、計測へ混ぜない。
-        let started = Instant::now();
-        #[cfg(windows)]
-        let native_window = window.hwnd().ok();
-        #[cfg(windows)]
-        if let Some(hwnd) = native_window {
-            // ShowWindowAsync avoids blocking the shortcut callback on WebView2's UI thread.
-            let _ = unsafe { ShowWindowAsync(hwnd, SW_SHOW) };
-        } else {
-            let _ = window.show();
-        }
-        #[cfg(not(windows))]
-        let _ = window.show();
-        if let Ok(mut samples) = app.state::<HotkeyPerformance>().0.lock() {
-            if samples.len() == 100 {
-                samples.pop_front();
+fn reveal_main_window(app: &tauri::AppHandle) {
+    let started = Instant::now();
+    let handle = app.clone();
+    // Show, restore, z-order and focus must complete in order on the owning
+    // thread. All entry points use this same transaction, including tray/open.
+    if app
+        .run_on_main_thread(move || {
+            remember_foreground_target(&handle);
+            let Some(window) = handle.get_webview_window("main") else {
+                return;
+            };
+            let result = activation::show(&window);
+            eprintln!(
+                "EmoShelf reveal: result={} elapsed_ms={}",
+                result.err().unwrap_or("foreground"),
+                started.elapsed().as_millis()
+            );
+            if result.is_ok() {
+                let id = REVEAL_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                if let Ok(mut timing) = handle.state::<RevealTiming>().0.lock() {
+                    *timing = Some((id, started));
+                }
+                let _ = handle.emit("shelf-revealed", id);
+            } else {
+                let _ =
+                    window.request_user_attention(Some(tauri::UserAttentionType::Informational));
             }
-            samples.push_back(started.elapsed().as_secs_f64() * 1000.0);
-        }
-        #[cfg(windows)]
-        if let Some(hwnd) = native_window {
-            let _ = unsafe { SetForegroundWindow(hwnd) };
-        } else {
-            let _ = window.set_focus();
-        }
-        #[cfg(not(windows))]
-        let _ = window.set_focus();
+        })
+        .is_err()
+    {
+        eprintln!("EmoShelf reveal: result=dispatch-failed");
     }
 }
 
-fn reveal_main_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
+#[tauri::command]
+fn acknowledge_reveal(app: tauri::AppHandle, id: u64) {
+    if let Ok(mut pending) = app.state::<RevealTiming>().0.lock() {
+        if let Some((current, started)) = *pending {
+            if current != id {
+                return;
+            }
+            if !app
+                .get_webview_window("main")
+                .is_some_and(|window| window.is_focused().unwrap_or(false))
+            {
+                return;
+            }
+            if let Ok(mut samples) = app.state::<HotkeyPerformance>().0.lock() {
+                if samples.len() == 100 {
+                    samples.pop_front();
+                }
+                samples.push_back(started.elapsed().as_secs_f64() * 1000.0);
+            }
+            *pending = None;
+        }
     }
+}
+
+// Exercise the exact hotkey/tray reveal path without injecting global keys on
+// shared CI desktops. The command is absent from shipping/acceptance binaries.
+#[cfg(feature = "wdio")]
+#[tauri::command]
+fn reveal_shelf_for_test(app: tauri::AppHandle) {
+    reveal_main_window(&app);
+}
+
+#[tauri::command]
+fn show_recovery_window(app: tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+    }
+}
+
+#[tauri::command]
+fn quit_after_save(app: tauri::AppHandle) {
+    app.exit(0);
 }
 
 /// 状態ファイル（本体・バックアップ）のパスを返す。ディレクトリは作成する。
@@ -509,10 +549,23 @@ fn save_state_to_paths(path: &Path, backup: &Path, content: &str) -> Result<(), 
     let value: serde_json::Value = serde_json::from_str(content).map_err(|e| e.to_string())?;
     let pretty = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
     if path.exists() {
-        std::fs::copy(path, backup).map_err(|e| e.to_string())?;
+        let old = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+        // Preserve the last valid backup when the primary was recovered after corruption.
+        if serde_json::from_str::<serde_json::Value>(&old).is_ok() {
+            let backup_tmp = backup.with_extension("bak.tmp");
+            let mut file = std::fs::File::create(&backup_tmp).map_err(|e| e.to_string())?;
+            file.write_all(old.as_bytes()).map_err(|e| e.to_string())?;
+            file.sync_all().map_err(|e| e.to_string())?;
+            drop(file);
+            std::fs::rename(&backup_tmp, backup).map_err(|e| e.to_string())?;
+        }
     }
     let tmp = path.with_extension(STATE_TMP_EXTENSION);
-    std::fs::write(&tmp, pretty).map_err(|e| e.to_string())?;
+    let mut file = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
+    file.write_all(pretty.as_bytes())
+        .map_err(|e| e.to_string())?;
+    file.sync_all().map_err(|e| e.to_string())?;
+    drop(file);
     std::fs::rename(&tmp, path).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -564,7 +617,11 @@ fn create_settings_backup_at(path: &Path, state_content: &str) -> Result<(), Str
     });
     let pretty = serde_json::to_string_pretty(&backup).map_err(|e| e.to_string())?;
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, pretty).map_err(|e| e.to_string())?;
+    let mut file = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
+    file.write_all(pretty.as_bytes())
+        .map_err(|e| e.to_string())?;
+    file.sync_all().map_err(|e| e.to_string())?;
+    drop(file);
     std::fs::rename(&tmp, path).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -1195,60 +1252,25 @@ fn set_global_shortcut(app: tauri::AppHandle, shortcut: String) -> Result<(), St
     Ok(())
 }
 
-/// Ctrl+V を押下する（フォアグラウンドアプリへのペースト用）。
-fn press_ctrl_v() -> Result<(), String> {
-    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
-    let mut enigo = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
-    enigo
-        .key(Key::Control, Direction::Press)
-        .map_err(|e| e.to_string())?;
-    let result = enigo
-        .key(Key::Unicode('v'), Direction::Click)
-        .map_err(|e| e.to_string());
-    let _ = enigo.key(Key::Control, Direction::Release);
-    result
-}
-
-#[cfg(windows)]
-fn focus_paste_target(app: &tauri::AppHandle) {
-    let target = app
-        .state::<PasteTarget>()
-        .0
-        .lock()
-        .ok()
-        .and_then(|guard| *guard);
-    if let Some(target) = target {
-        // SAFETY: The handle was captured from GetForegroundWindow. Windows validates stale handles.
-        let _ = unsafe { SetForegroundWindow(isize_to_hwnd(target)) };
-    }
-}
-
-#[cfg(not(windows))]
-fn focus_paste_target(_app: &tauri::AppHandle) {}
-
-/// ペイロードをペーストする: クリップボードへ書き込み → 自分を隠す →
-/// フォーカス復帰を待つ → Ctrl+V。Tauri の同期コマンドとして実行する
-///（ブロッキングプール上で動くため短い sleep は問題ない）。
+/// Async command: native focus waits must never block the WebView message loop.
 #[tauri::command]
-fn paste_payload(
+async fn paste_payload(
     app: tauri::AppHandle,
     payload: String,
     keep_open: Option<bool>,
-) -> Result<(), String> {
+) -> desktop::PasteOutcome {
     if payload.is_empty() {
-        return Err("payload must not be empty".to_string());
+        return desktop::PasteOutcome::failed("empty-payload");
     }
-    app.clipboard()
-        .write_text(payload)
-        .map_err(|e| e.to_string())?;
-    if !keep_open.unwrap_or(false) {
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.hide();
-        }
-    }
-    focus_paste_target(&app);
-    std::thread::sleep(PASTE_FOCUS_WAIT);
-    press_ctrl_v()
+    tauri::async_runtime::spawn_blocking(move || {
+        desktop::insert(&app, keep_open.unwrap_or(false), || {
+            app.clipboard()
+                .write_text(payload.clone())
+                .map_err(|error| error.to_string())
+        })
+    })
+    .await
+    .unwrap_or_else(|_| desktop::PasteOutcome::failed("worker-failed"))
 }
 
 fn clipboard_image_from_asset(
@@ -1277,20 +1299,18 @@ fn copy_image_asset(app: tauri::AppHandle, asset_id: String) -> Result<(), Strin
 }
 
 #[tauri::command]
-fn paste_image_asset(
+async fn paste_image_asset(
     app: tauri::AppHandle,
     asset_id: String,
     keep_open: Option<bool>,
-) -> Result<(), String> {
-    copy_image_asset(app.clone(), asset_id)?;
-    if !keep_open.unwrap_or(false) {
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.hide();
-        }
-    }
-    focus_paste_target(&app);
-    std::thread::sleep(PASTE_FOCUS_WAIT);
-    press_ctrl_v()
+) -> desktop::PasteOutcome {
+    tauri::async_runtime::spawn_blocking(move || {
+        desktop::insert(&app, keep_open.unwrap_or(false), || {
+            copy_image_asset(app.clone(), asset_id.clone())
+        })
+    })
+    .await
+    .unwrap_or_else(|_| desktop::PasteOutcome::failed("worker-failed"))
 }
 
 #[cfg(windows)]
@@ -1381,7 +1401,6 @@ pub fn run() {
 
     builder
         .manage(ActiveShortcut(Mutex::new(None)))
-        .manage(PasteTarget(Mutex::new(None)))
         .manage(CapturedContext(Mutex::new(None)))
         .manage(ContextPreferences(Mutex::new(RuntimePreferences {
             per_app_boards_enabled: false,
@@ -1392,6 +1411,7 @@ pub fn run() {
             configured_updater_public_key().is_some(),
         ))
         .manage(HotkeyPerformance(Mutex::new(VecDeque::with_capacity(100))))
+        .manage(RevealTiming(Mutex::new(None)))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -1410,14 +1430,16 @@ pub fn run() {
         )
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // 二重起動で呼び出した前面アプリも、貼り付け先として保持する。
-            remember_foreground_target(app);
             reveal_main_window(app);
         }))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
                     if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        toggle_main_window(app);
+                        // Windows already registers MOD_NOREPEAT. A second latch
+                        // can drop a new press before the polled Released arrives.
+                        // Revealing is idempotent, even on repeated events.
+                        reveal_main_window(app);
                     }
                 })
                 .build(),
@@ -1456,10 +1478,11 @@ pub fn run() {
                     .show_menu_on_left_click(false)
                     .on_menu_event(|app, event| match event.id.as_ref() {
                         "show" => {
-                            remember_foreground_target(app);
                             reveal_main_window(app);
                         }
-                        "quit" => app.exit(0),
+                        "quit" => {
+                            let _ = app.emit("request-quit", ());
+                        }
                         _ => {}
                     })
                     .on_tray_icon_event(|tray, event| {
@@ -1469,7 +1492,6 @@ pub fn run() {
                             ..
                         } = event
                         {
-                            remember_foreground_target(tray.app_handle());
                             reveal_main_window(tray.app_handle());
                         }
                     });
@@ -1506,6 +1528,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            #[cfg(feature = "wdio")]
+            reveal_shelf_for_test,
             load_state,
             save_state,
             create_settings_backup,
@@ -1515,6 +1539,9 @@ pub fn run() {
             get_performance_snapshot,
             set_global_shortcut,
             paste_payload,
+            show_recovery_window,
+            acknowledge_reveal,
+            quit_after_save,
             copy_image_asset,
             paste_image_asset,
             drag_image_asset,
@@ -1621,6 +1648,20 @@ mod tests {
         let path = dir.path().join(STATE_FILE_NAME);
         let backup = dir.path().join(STATE_BACKUP_NAME);
         assert_eq!(load_state_from_paths(&path, &backup), Ok(None));
+    }
+
+    #[test]
+    fn saving_after_recovery_preserves_the_valid_backup() {
+        let dir = TempDir::new("recovered-save");
+        let path = dir.path().join(STATE_FILE_NAME);
+        let backup = dir.path().join(STATE_BACKUP_NAME);
+        std::fs::write(&path, "broken").unwrap();
+        std::fs::write(&backup, VALID_JSON).unwrap();
+        save_state_to_paths(&path, &backup, VALID_JSON).unwrap();
+        assert_eq!(std::fs::read_to_string(backup).unwrap(), VALID_JSON);
+        assert!(load_state_from_paths(&path, &dir.path().join("missing"))
+            .unwrap()
+            .is_some());
     }
 
     #[test]
