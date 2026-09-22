@@ -28,7 +28,8 @@ The goal is not to build the largest emoji platform. The goal is to make frequen
 - [x] Native emoji centered across catalog, shelf, details and selection summary
 - [x] Optional details, explicit edit/compose/copy modes, IME guards and local practice
 - [x] Serialized saves and save completion before Quit/update installation
-- [x] 84 frontend, 7 tooling, 71 Rust tests and 10 desktop E2E scenarios recorded
+- [x] English All layout fits the viewport; high-resolution English/Japanese screenshots
+- [x] 84 frontend, 7 tooling, 71 Rust tests and 11 desktop E2E scenarios recorded
 
 The checks above do not establish the full external-app or release acceptance gates.
 Physical Ctrl+1 remains unverified after an inconclusive desktop-helper attempt.

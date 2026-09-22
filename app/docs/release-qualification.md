@@ -55,6 +55,31 @@ screenshot. Logs: `logs/pre-push-check-20260922.log`, `logs/pre-push-lp-20260922
 The earlier Rust and desktop E2E results below were retained; those implementations
 were not changed by this documentation update.
 
+### Localized high-resolution screenshots and English layout (2026-09-22)
+
+- Replaced the 803×603 JPEG preview with separate English and Japanese 1762×1322
+  PNG captures of the real app. README and LP use the matching UI language.
+  See [capture provenance](../../images/screenshots/README.md).
+- Capturing English All exposed an implicit grid column growing to its content
+  width and clipping right-side controls. An explicit `minmax(0, 1fr)` column
+  keeps the shell within the viewport.
+- `pnpm test:e2e`: all 11 scenarios passed, including English All at 880px and
+  480px window widths. As with the Native geometry test, locale setup dispatches
+  the real select change handler; this is not physical OS dropdown acceptance.
+- The normal x64 capture build (no WebDriver) passed. Both locale screenshots
+  were visually inspected at original resolution. A separate public sample
+  profile was used; the user's installed binary and data were not replaced.
+- `pnpm lp:build` passed. Browser checks confirmed both language buttons load
+  the corresponding 1762×1322 PNG and preserve its aspect ratio when displayed
+  at 593×445. All 40 local links/images in the affected README/provenance records
+  resolve; changed-file Biome checks passed with existing style warnings.
+- Logs: `logs/readme-capture-20260922/build-fixed.log`,
+  `logs/readme-capture-20260922/e2e.log`,
+  `logs/readme-capture-20260922/format-final.log`,
+  `logs/readme-capture-20260922/lp-build.log`.
+- Earlier frontend/tooling/Rust results are retained. This CSS change and the
+  screenshot build do not establish new external-app or release acceptance.
+
 ### Native emoji alignment and style availability (2026-09-22)
 
 - Reproduced with the installed Native setting. The fallback glyph advance was

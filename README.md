@@ -12,7 +12,7 @@ EmoShelf is a fast, local-first Windows app for keeping the emojis, sequences, s
 
 Press <kbd>Alt</kbd> + <kbd>E</kbd>, choose from your Board or **All**, and paste. No account, cloud sync, telemetry, or remote profile is required.
 
-![EmoShelf All catalog with native emoji — development preview](./images/screenshots/emoshelf-reliability-preview.jpg)
+![EmoShelf in English with the All catalog and native emoji — development preview](./images/screenshots/emoshelf-en.png)
 
 Actual local development build, September 22, 2026. These changes are not included
 in the published RC 1 installer; formal release qualification is still in progress.
@@ -85,7 +85,7 @@ checklist](app/docs/renderer-packs.md) for the remaining work.
 
 ## Development checkpoint — September 22, 2026
 
-Local checks passed: **84 frontend tests, 7 tooling tests, 71 Rust tests, and 10
+Local checks passed: **84 frontend tests, 7 tooling tests, 71 Rust tests, and 11
 desktop E2E scenarios**. The Rust results cover the native Alt+E/paste changes;
 later All/style changes are frontend changes. Native alignment was also checked
 at four sizes. External insertion has only limited Notepad smoke coverage on the

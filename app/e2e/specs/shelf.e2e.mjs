@@ -159,6 +159,47 @@ describe("EmoShelf desktop shell", () => {
     await browser.setWindowSize(880, 660);
   });
 
+  it("keeps English All navigation and window controls inside the viewport", async () => {
+    await $(".settings-button").click();
+    await browser.execute(() => {
+      const select = document.querySelector('select:has(option[value="en"])');
+      select.value = "en";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await browser.keys("Escape");
+    await $(".board-tab").click();
+    await $(".virtual-grid-scroll button").waitForDisplayed();
+    for (const width of [880, 480]) {
+      await browser.setWindowSize(width, 660);
+      await browser.waitUntil(async () =>
+        browser.execute((limit) => window.innerWidth <= limit, width),
+      );
+      const clipped = await browser.execute(() =>
+        [
+          ".titlebar",
+          ".window-controls",
+          ".shelf-app",
+          ".main-search",
+          ".category-strip",
+          ".main-panel",
+          ".utility-footer",
+        ].filter((selector) => {
+          const rect = document.querySelector(selector).getBoundingClientRect();
+          return rect.left < 0 || rect.right > window.innerWidth + 1;
+        }),
+      );
+      expect(clipped).toEqual([]);
+    }
+    await browser.setWindowSize(880, 660);
+    await $(".settings-button").click();
+    await browser.execute(() => {
+      const select = document.querySelector('select:has(option[value="en"])');
+      select.value = "system";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await browser.keys("Escape");
+  });
+
   it("centers native emoji text even when its glyph advance exceeds the image slot", async () => {
     // The embedded driver selects option nodes without dispatching change.
     // Set up this geometry test through the real React change handler; this

@@ -35,7 +35,9 @@ noindexはアクセス制限ではなく、公開URLは誰でも閲覧できる�
 
 Twemojiはインストール済みパッケージから必要な17素材だけをビルドに含める。
 帰属とCC BY 4.0リンクをフッターに表示する。アプリアイコンは既存素材を利用する。
-スクリーンショットは2026-09-22のローカル開発版の実画面
-(`images/screenshots/emoshelf-reliability-preview.jpg`)。AllタブとNative配置修正を含む。
+スクリーンショットは2026-09-22のローカル開発版を原寸で撮影した1762×1322のPNG。
+表示言語に合わせて`images/screenshots/emoshelf-en.png`と`emoshelf-ja.png`を切り替える。
+Allタブ、Native配置修正、英語UIの横はみ出し修正を含む。
+撮影条件は[`images/screenshots/README.md`](../../images/screenshots/README.md)を参照。
 公開済みRC 1とは異なるため、開発版・公開準備中の表示を維持する。
 署名済み配布候補の検証完了後に、その実物に合わせて画像と説明を再確認する。

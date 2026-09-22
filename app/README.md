@@ -8,7 +8,7 @@ EmoShelf 本体の Tauri 2 + React + TypeScript プロジェクト。
 左端のAll、Native絵文字の中央配置、追加スタイルの未導入表示を実装しています。
 既存のBoard・設定・画像とschema v2を保持します。
 
-最新のローカル検証はフロント84件・補助ツール7件・Rust71件・デスクトップE2E10件。
+最新のローカル検証はフロント84件・補助ツール7件・Rust71件・デスクトップE2E11件。
 各結果が適用される実行ファイルと実機確認範囲は[`docs/release-qualification.md`](docs/release-qualification.md)を参照。
 公開済みRC 1には今回の改善は含まれません。ローカル候補は未署名で、正式公開条件は未達です。
 

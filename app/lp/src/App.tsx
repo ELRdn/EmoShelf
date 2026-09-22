@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import screenshot from "../../../images/screenshots/emoshelf-reliability-preview.jpg";
+import screenshotEn from "../../../images/screenshots/emoshelf-en.png";
+import screenshotJa from "../../../images/screenshots/emoshelf-ja.png";
 import icon from "../../src-tauri/icons/128x128.png";
 import { socialLinks } from "./config";
 import "./style.css";
@@ -585,7 +586,9 @@ export default function App() {
             </div>
             <figure>
               <img
-                src={screenshot}
+                src={lang === "ja" ? screenshotJa : screenshotEn}
+                width={1762}
+                height={1322}
                 alt={
                   lang === "ja"
                     ? "EmoShelf開発版の実画面。左端のAllタブ、検索、Windows標準の絵文字一覧と詳細の開閉ボタン。"
