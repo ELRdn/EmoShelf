@@ -1,5 +1,7 @@
 # EmoShelf
 
+**English** | [日本語](./README.jp.md)
+
 <p align="center">
   <img src="./images/brand/emoshelf-icon-master.png" width="160" height="160" alt="EmoShelf — sunglasses face behind a purple shelf">
 </p>
@@ -102,30 +104,30 @@ To establish the public release history required for a SignPath Foundation appli
 
 Formal `v1.0.0` artifacts are released only after SignPath Foundation approval, Authenticode verification, updater-signature verification, and installer smoke tests. Do not redistribute an unsigned prerelease or CI artifact as an official release.
 
-### Unsigned RC installation / 未署名RCのインストール
+### Installing the unsigned release candidate
 
-**現在のRCは未署名のテスト版であり、正式な署名済みリリースではありません。SignPathの承認状況と署名設定は配布候補の作成前に再確認します。** 未署名のため、Windowsは証明書で発行元を確認できません。以下の確認でリスクを減らせますが、安全性を保証するものではありません。不安がある場合や業務用・学校管理のPCでは、署名済み正式版を待つか管理者に相談してください。
+**The current RC is an unsigned test build, not an official signed release. SignPath approval and signing configuration will be rechecked before preparing the next distribution candidate.** Without a signature, Windows cannot verify the publisher through a certificate. The checks below reduce risk but do not guarantee safety. If you are unsure, or use a work- or school-managed PC, wait for the signed release or consult your administrator.
 
-English summary: use only the linked GitHub Release, choose the matching architecture, and compare the complete SHA-256 before opening the installer. A matching hash is not proof of publisher identity or safety. Scan the file, keep Windows protections enabled, and stop on a threat detection or policy block. Only consider the per-file SmartScreen **More info → Run anyway** option if the warning is solely about an unrecognized app and you trust the source. This RC has no production updater configured; back up and update manually.
+Before installing, use only the linked GitHub Release, choose the matching architecture, and compare the complete SHA-256. A matching hash is not proof of publisher identity or safety. Scan the file, keep Windows protections enabled, and stop on a threat detection or policy block. Only consider the per-file SmartScreen **More info → Run anyway** option if the warning is solely about an unrecognized app and you trust the source. This RC has no production updater configured; back up and update manually.
 
-#### 1. 公式Releaseから、自分のPC用のEXEを入手する
+#### 1. Download the EXE for your PC from the official release
 
-Windowsの **設定 → システム → バージョン情報 → システムの種類** で、プロセッサが「x64ベース」か「ARMベース」かを確認してください。「64ビット」という表示だけでは区別できません。
+In Windows, open **Settings → System → About → System type** and check whether your processor is x64-based or ARM-based. The label "64-bit" alone does not distinguish them.
 
-[公式 v1.0.0-rc.1 Release](https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0-rc.1) の **Assets** から、次のどちらか1つと `SHA256SUMS.txt` を同じフォルダーへダウンロードします。
+Under **Assets** on the [official v1.0.0-rc.1 release](https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0-rc.1), download one of the following installers and `SHA256SUMS.txt` into the same folder.
 
-| PCの種類 | ダウンロードするインストーラー |
+| PC type | Installer to download |
 | --- | --- |
-| x64（Intel / AMD） | `EmoShelf_1.0.0-rc.1_windows-x86_64_UNSIGNED-setup.exe` |
-| ARM64（Snapdragonなど） | `EmoShelf_1.0.0-rc.1_windows-aarch64_UNSIGNED-setup.exe` |
+| x64 (Intel / AMD) | `EmoShelf_1.0.0-rc.1_windows-x86_64_UNSIGNED-setup.exe` |
+| ARM64 (such as Snapdragon) | `EmoShelf_1.0.0-rc.1_windows-aarch64_UNSIGNED-setup.exe` |
 
-これはインストーラーであり、ポータブル版ではありません。通常はEXEだけでよく、MSIも重ねてインストールする必要はありません。`Source code (zip)` / `Source code (tar.gz)` は実行用ではありません。
+These are installers, not portable builds. The EXE is normally sufficient; you do not also need to install the MSI. `Source code (zip)` and `Source code (tar.gz)` are not ready-to-run applications.
 
-入手元が **`github.com/ELRdn/EmoShelf`** であることを確認してください。検索広告、非公式ミラー、DM・メール添付からは入手しないでください。ブラウザーが脅威を検出した場合はダウンロードを中止します。「一般的にダウンロードされていない」という評判の警告だけでも、安全と決めつけず、入手元とRCであることを確認してください。
+Confirm that the source is **`github.com/ELRdn/EmoShelf`**. Do not download through search ads, unofficial mirrors, direct messages, or email attachments. Stop if your browser detects a threat. Even if the warning only says the file is not commonly downloaded, do not assume it is safe: verify the source and remember that this is a release candidate.
 
-#### 2. 実行する前にSHA-256を照合する
+#### 2. Compare the SHA-256 before running the installer
 
-エクスプローラーでダウンロード先のフォルダーを開き、アドレスバーに `powershell` と入力してEnterを押します。管理者として開く必要はありません。選んだファイルに対応するコマンドを**どちらか1つ**実行してください。これはハッシュの表示だけを行い、EXEを起動しません。
+Open the download folder in File Explorer, type `powershell` in the address bar, and press Enter. Administrator privileges are not required. Run **only the command matching your downloaded file**. It displays the hash without launching the EXE.
 
 x64:
 
@@ -139,43 +141,43 @@ ARM64:
 Get-FileHash -LiteralPath '.\EmoShelf_1.0.0-rc.1_windows-aarch64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
 ```
 
-同じReleaseから取得した `SHA256SUMS.txt` をメモ帳で開き、**同じファイル名の行**と出力の `Hash` を比較します。64桁すべての一致が必要です（英字の大文字・小文字は無視できます）。先頭や末尾だけで判断しないでください。ファイル名に `(1)` などが付いている場合は、コマンドの名前を実際の名前に合わせ、照合先には元の配布ファイル名の行を使います。
+Open `SHA256SUMS.txt` from the same release in Notepad. Compare the output's `Hash` with **the line for the same filename**. All 64 characters must match; letter case does not matter. Do not check only the beginning or end. If the downloaded filename has a suffix such as `(1)`, adjust the command to match the actual filename, but compare against the checksum entry for the original release filename.
 
-不一致、ファイルが見つからない、該当するハッシュがない場合は、**インストールしないでください**。公式Releaseから取り直しても一致しなければ、[GitHub Issues](https://github.com/ELRdn/EmoShelf/issues)へ報告してください。
+**Do not install** if the hashes differ, the file cannot be found, or there is no matching checksum entry. Download it again from the official release. If it still does not match, report the issue through [GitHub Issues](https://github.com/ELRdn/EmoShelf/issues).
 
-ハッシュ一致は「公開されたチェックサムと同じ内容」という確認です。チェックサムも同じ配布元にあるため、配布元自体の侵害やアプリの無害性を保証せず、コード署名の代わりにはなりません。コマンドの仕様は[MicrosoftのGet-FileHash解説](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/get-filehash?view=powershell-5.1)を参照してください。
+A matching hash confirms that the bytes match the published checksum. Because the checksum comes from the same source, it does not protect against compromise of that source or prove that the app is harmless. It is not a substitute for code signing. See [Microsoft's Get-FileHash documentation](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/get-filehash?view=powershell-5.1) for the command reference.
 
-#### 3. スキャンし、警告の内容を確認してインストールする
+#### 3. Scan the file, review warnings, and install
 
-1. Windowsとウイルス対策を最新にし、EXEを右クリック → **その他のオプションを確認 → Microsoft Defenderでスキャンする** を選びます。他社製ウイルス対策を利用中なら、その製品でスキャンしてください。検出がなくても安全の保証ではありません。[Microsoftのスキャン手順](https://support.microsoft.com/en-us/windows/scan-an-item-with-windows-security-d1c8c01d-12ed-e768-cbb8-830ea8ccf8e6)
-2. 脅威が検出されず、入手元・ハッシュ・未署名RCであることを確認し、リスクを了承できた場合だけEXEをダブルクリックします。
-3. SmartScreenの **「WindowsによってPCが保護されました」** が、認識されていないアプリについての警告だけである場合は、**「詳細情報」** でアプリ名を確認します。このRCでは発行元が **「不明な発行元」** になることがあります。これは認証済みという意味ではありません。確認したファイルを信頼し、自分の判断で進める場合に限り **「実行」** を選べます。不安なら **「実行しない」** で中止してください。[MicrosoftのSmartScreen案内](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/publish-first-app#step-6-handle-smartscreen-for-new-apps)
-4. インストーラーの案内に従います。UAC（デバイスへの変更の許可）が表示された場合も、自分で起動したインストーラーか確認し、不明な別プログラムや想定外の要求ならキャンセルしてください。警告回避のために「管理者として実行」を使わないでください。
+1. Update Windows and your antivirus software. Right-click the EXE and select **Show more options → Scan with Microsoft Defender**. If you use another antivirus product, scan with that instead. A clean scan does not guarantee safety. [Microsoft's scanning instructions](https://support.microsoft.com/en-us/windows/scan-an-item-with-windows-security-d1c8c01d-12ed-e768-cbb8-830ea8ccf8e6)
+2. Double-click the EXE only if no threat was detected, you verified the source and hash, and you accept the risks of using an unsigned RC.
+3. If SmartScreen's **"Windows protected your PC"** message is solely a warning about an unrecognized app, select **More info** to check the app name. This RC may show **Unknown publisher**, which does not mean the publisher is verified. Choose **Run anyway** only if you trust the verified file and decide to proceed. If unsure, select **Don't run**. [Microsoft's SmartScreen guidance](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/publish-first-app#step-6-handle-smartscreen-for-new-apps)
+4. Follow the installer. If User Account Control asks to allow changes to your device, confirm that it is the installer you launched. Cancel if it names an unfamiliar program or makes an unexpected request. Do not use **Run as administrator** to bypass warnings.
 
-**次の場合は実行せず、署名済み版を待つか管理者へ相談してください。**
+**Do not run the installer in the following cases. Wait for a signed build or consult your administrator.**
 
-- ウイルス・マルウェア・望ましくないアプリとして検出された、または隔離された。
-- Smart App Control、組織のポリシー、Sモードなどで実行が禁止されている。
-- 「実行」ボタンがない、または警告内容を判断できない。
+- The file is detected as a virus, malware, or an unwanted app, or is quarantined.
+- Smart App Control, an organization policy, or S mode blocks execution.
+- There is no **Run anyway** button, or you cannot determine what the warning means.
 
-Defenderのリアルタイム保護、SmartScreen、Smart App Controlを無効にしたり、除外設定を追加したり、隔離されたファイルを復元して強行したりしないでください。別形式のMSIに切り替えて制限を回避することも勧めません。Smart App Controlにはアプリ単位の例外許可がありません。[MicrosoftのSmart App Control FAQ](https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions)
+Do not disable Defender real-time protection, SmartScreen, or Smart App Control; add antivirus exclusions; or restore a quarantined file to force installation. Do not switch to the MSI to bypass a restriction. Smart App Control does not support exceptions for individual apps. [Microsoft's Smart App Control FAQ](https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions)
 
-#### 4. 起動して、まずメモ帳で試す
+#### 4. Launch EmoShelf and try it in Notepad
 
-1. スタートメニューから **EmoShelf** を起動し、初回案内で使いたい絵文字を選びます。言語や動作は設定で変更できます。
-2. 通常権限で起動したメモ帳の入力欄をクリックし、**Alt+E** でEmoShelfを表示します。
-3. 通常のBoard表示（編集・Composeモードではない状態）で絵文字をクリックして貼り付けます。キーボードなら矢印キーで選んで **Enter** です。クリックした時点で貼り付けるため、続けてEnterを押す必要はありません。コピーのみの設定や貼り付けがうまくいかない場合は、EmoShelfでコピーしてからメモ帳へ戻り **Ctrl+V** で貼り付けてください。クリップボードの内容は置き換わります。
-4. **Alt+E** が反応しない場合は、タスクトレイのアイコンから開き、設定で他アプリと競合しないショートカットに変更します。アイコンが隠れている場合はタスクバーの **∧** を開きます。
+1. Launch **EmoShelf** from the Start menu and choose your preferred emoji during onboarding. You can change the language and behavior in settings.
+2. Click the editing area in a normally launched, non-administrator Notepad window, then press **Alt+E** to open EmoShelf.
+3. In the normal Board view, outside edit or Compose mode, click an emoji to paste it. For keyboard use, select it with the arrow keys and press **Enter**. A click already pastes, so do not press Enter afterward. In copy-only mode, or if automatic pasting fails, copy in EmoShelf, return to Notepad, and press **Ctrl+V**. This replaces your clipboard contents.
+4. If **Alt+E** does not respond, open EmoShelf from its system tray icon and choose a shortcut that does not conflict with another app. If the icon is hidden, open the taskbar's **∧** menu.
 
-ウィンドウの閉じるボタンは終了ではなくトレイへの格納です。完全に終了するには、トレイアイコンを右クリック → **Quit** を選びます。貼り付け先が管理者権限で動いているなどの理由で貼り付けできない場合も、EmoShelfを昇格させず手動コピーを利用してください。
+The window's close button hides EmoShelf in the tray; it does not quit the app. To exit completely, right-click the tray icon and select **Quit**. If pasting fails because the target app runs as administrator or for another reason, use manual copying rather than elevating EmoShelf.
 
-#### 5. バックアップ・更新・アンインストール
+#### 5. Back up, update, and uninstall
 
-このRCには本番用Updater公開鍵が設定されていないため、アプリ内更新は利用できません。更新時は設定のExportから **`.emoshelf` バックアップ** を保存し、アプリを終了して、公式Releasesの新しい版を確認してください。新しい配布物はそのReleaseのチェックサム・署名方針で確認し、RCのチェックサムを流用しないでください。
+This RC does not have a production updater public key, so in-app updates are unavailable. Before updating, save a **`.emoshelf` backup** using Export in settings, quit the app, and check the official Releases page for a newer version. Verify the new files using that release's checksums and signing policy; do not reuse the RC's checksums.
 
-アンインストールはバックアップ後にトレイの **Quit** で終了し、Windowsの **設定 → アプリ → インストールされているアプリ → EmoShelf → アンインストール** から行います。保存データが必ず残るとは考えず、バックアップをアプリ外へ保管してください。
+To uninstall, back up your data, select **Quit** in the tray menu, then open **Settings → Apps → Installed apps → EmoShelf → Uninstall** in Windows. Do not assume that saved data will survive uninstallation; keep your backup outside the app's storage.
 
-問題の報告先は[GitHub Issues](https://github.com/ELRdn/EmoShelf/issues)です。RCタグ、ファイル名、Windowsのバージョンとx64/ARM64、警告文を添えてください。スクリーンショットの個人情報は隠し、クリップボードの内容や個人のバックアップファイルは公開しないでください。
+Report problems through [GitHub Issues](https://github.com/ELRdn/EmoShelf/issues). Include the RC tag, filename, Windows version, x64/ARM64 architecture, and warning text. Hide personal information in screenshots, and do not publish clipboard contents or personal backup files.
 
 ## Privacy and security
 
