@@ -27,13 +27,13 @@ in the published RC 1 installer; formal release qualification is still in progre
 - `.emoshelf` backup, preview, merge, and replace workflows
 - Global shortcut, Quick/Pinned modes, system tray, autostart, monitor-aware placement, and single instance
 - Dark, light, and system themes with keyboard navigation, visible focus, high-contrast support, and Reduced Motion
-- Update support with explicit consent and signature verification; production signing setup is still pending
+- Manual updates with backup guidance; automatic updates remain disabled until trusted updater keys are configured
 
 ## Fast path
 
 The unreleased reliability refresh is being qualified before broader distribution.
 See the [release qualification record](app/docs/release-qualification.md) for verified
-behavior and pending compatibility/signing checks. The screenshot shows the current
+behavior and pending compatibility checks. The screenshot shows the current
 development UI; it does not demonstrate external application compatibility.
 
 ```text
@@ -83,30 +83,32 @@ Style changes affect EmoShelf's preview. Unicode pasted into another application
 uses that application's emoji font. See the [pack specification and delivery
 checklist](app/docs/renderer-packs.md) for the remaining work.
 
-## Development checkpoint — September 22, 2026
+## Development checkpoint — September 26, 2026
 
-Local checks passed: **84 frontend tests, 7 tooling tests, 71 Rust tests, and 11
-desktop E2E scenarios**. The Rust results cover the native Alt+E/paste changes;
-later All/style changes are frontend changes. Native alignment was also checked
-at four sizes. External insertion has only limited Notepad smoke coverage on the
-earlier Alt+E candidate, not the full acceptance matrix on the latest binary.
+The launch polish adds bilingual download/install guidance, share metadata and a
+mobile layout review, render/catalog recovery, clearer manual updates, and localized
+shelf accessibility labels. Settings now consume Escape without also hiding the shelf.
+The installed-app test runner works with production binaries without a test plugin.
 
-The latest local x64 candidate is unsigned. Signed installers, ARM64 acceptance,
+Current results and exact artifact hashes are in the [launch report](app/docs/launch-review-20260926.md).
+The earlier 71 Rust-test result remains historical; no Rust source changed in this pass.
+
+The distribution plan is unsigned. Installer qualification, ARM64 acceptance,
 the full app/DPI/accessibility matrix, performance qualification and five business
 days of stable use remain required. [Evidence and limitations](app/docs/release-qualification.md)
 are recorded separately from implementation completion.
 
 ## Install
 
-Official builds target Windows 11 on x64 and ARM64. Signed installers and checksums are published on [GitHub Releases](https://github.com/ELRdn/EmoShelf/releases) after the external signing gates are complete.
+EmoShelf targets Windows 11 on x64 and ARM64 and will be distributed **without code signing**, including stable releases. Download installers and checksums from [GitHub Releases](https://github.com/ELRdn/EmoShelf/releases).
 
-To establish the public release history required for a SignPath Foundation application, EmoShelf may publish a clearly labelled **unsigned prerelease**. The current [v1.0.0 RC 1](https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0-rc.1) is such an application build: it is not the formal release, and Windows may show an unknown-publisher or SmartScreen warning.
+The current download is [v1.0.0 RC 1](https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0-rc.1), an **unsigned test release**. It predates the development screenshots and improvements above. Windows may show an unknown-publisher or SmartScreen warning.
 
-Formal `v1.0.0` artifacts are released only after SignPath Foundation approval, Authenticode verification, updater-signature verification, and installer smoke tests. Do not redistribute an unsigned prerelease or CI artifact as an official release.
+Stable artifacts require source, checksum, installer and compatibility qualification. SignPath is not providing signing for the project. See the [distribution policy](./CODE_SIGNING_POLICY.md). Local candidates and CI artifacts are not published releases.
 
 ### Installing the unsigned release candidate
 
-**The current RC is an unsigned test build, not an official signed release. SignPath approval and signing configuration will be rechecked before preparing the next distribution candidate.** Without a signature, Windows cannot verify the publisher through a certificate. The checks below reduce risk but do not guarantee safety. If you are unsure, or use a work- or school-managed PC, wait for the signed release or consult your administrator.
+**Current RC and planned stable releases are unsigned.** Windows cannot verify the publisher through a certificate. Follow the source and checksum checks below. On a work- or school-managed PC, consult your administrator if unsigned applications are restricted.
 
 Before installing, use only the linked GitHub Release, choose the matching architecture, and compare the complete SHA-256. A matching hash is not proof of publisher identity or safety. Scan the file, keep Windows protections enabled, and stop on a threat detection or policy block. Only consider the per-file SmartScreen **More info → Run anyway** option if the warning is solely about an unrecognized app and you trust the source. This RC has no production updater configured; back up and update manually.
 
@@ -154,7 +156,7 @@ A matching hash confirms that the bytes match the published checksum. Because th
 3. If SmartScreen's **"Windows protected your PC"** message is solely a warning about an unrecognized app, select **More info** to check the app name. This RC may show **Unknown publisher**, which does not mean the publisher is verified. Choose **Run anyway** only if you trust the verified file and decide to proceed. If unsure, select **Don't run**. [Microsoft's SmartScreen guidance](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/publish-first-app#step-6-handle-smartscreen-for-new-apps)
 4. Follow the installer. If User Account Control asks to allow changes to your device, confirm that it is the installer you launched. Cancel if it names an unfamiliar program or makes an unexpected request. Do not use **Run as administrator** to bypass warnings.
 
-**Do not run the installer in the following cases. Wait for a signed build or consult your administrator.**
+**Do not run the installer in the following cases. Stop and consult your administrator if needed.**
 
 - The file is detected as a virus, malware, or an unwanted app, or is quarantined.
 - Smart App Control, an organization policy, or S mode blocks execution.

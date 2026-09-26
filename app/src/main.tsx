@@ -1,6 +1,11 @@
+import { isTauri } from "@tauri-apps/api/core";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import {
+  AppErrorBoundary,
+  StartupRecovery,
+} from "./components/AppErrorBoundary";
 import { useShelfStore } from "./lib/store";
 
 async function bootstrap() {
@@ -10,11 +15,14 @@ async function bootstrap() {
   }
 
   // 起動直後に保存済み状態の読み込み＋ショートカット登録を行う（UI 描画と並行）。
-  void useShelfStore.getState().initialize();
+  const desktop = isTauri();
+  if (desktop) void useShelfStore.getState().initialize();
 
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
-      <App />
+      <AppErrorBoundary>
+        {desktop ? <App /> : <StartupRecovery desktopRequired />}
+      </AppErrorBoundary>
     </React.StrictMode>,
   );
 }

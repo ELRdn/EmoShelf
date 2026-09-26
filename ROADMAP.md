@@ -525,10 +525,8 @@ v1.0手動ゲートへ残す。Narrator、125%／150%／200%、大文字、高DP
 - [x] Current development screenshot and preview media
 - [ ] Final release screenshot/demo and README verified against the qualified artifact
 
-正式アイコン、公開文書、実Tauri E2E、署名済み配布workflow、Renderer Pack生成・署名検証は
-Release Candidateとして実装済み。Stable release、ショートカット／貼り付けの最終実機反復、
-アクセシビリティ手動項目、署名済みinstaller lifecycleはSignPath承認とユーザー側デスクトップでの
-最終受け入れ後にだけ完了扱いとする。
+2026-09-26に未署名配布・手動更新へ方針変更。LPの導入導線・共有情報・モバイル表示、本体の復旧・読み上げ・設定Escを改善し、未署名の下書き配布workflowを追加。SignPath承認は公開条件から外す。
+Stable release、全互換性マトリクス、ARM64・インストーラーの全検証、5営業日の実利用は実施証跡が揃ってから完了扱いにする。[今回の検証記録](app/docs/launch-review-20260926.md)を参照。
 
 ## Product promise
 

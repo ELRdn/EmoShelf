@@ -40,6 +40,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm lp:build
+      - run: pnpm lp:audit
       - run: pnpm release:audit
 
   rust:

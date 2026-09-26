@@ -4,7 +4,7 @@
   color: #18181b;
   background: #f4f4f6;
   font-synthesis: none;
-  --purple: #7467e8;
+  --purple: #6858d4;
   --ink: #18181b;
   --muted: #62616c;
   --yellow: #ffc857;
@@ -117,24 +117,30 @@ img {
   align-items: center;
   gap: 36px;
 }
-.language {
+.nav .language {
   display: flex;
   align-items: center;
   font: 13.2px monospace;
   gap: 6px;
   color: #a09dab;
 }
-.language button {
+.language a {
   border: 0;
   background: none;
-  padding: 8.4px 3.6px;
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  min-height: 44px;
   color: #686573;
 }
-.language button[aria-pressed="true"] {
+.language a[aria-current="page"] {
   color: var(--ink);
   font-weight: 800;
 }
 .nav-github {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
   background: none;
   border: 1px solid #d8d7de;
   border-radius: 28.8px;
@@ -244,7 +250,7 @@ img {
   align-items: center;
   gap: 18px;
   font-size: 12px;
-  color: #72707a;
+  color: var(--muted);
   margin-top: 30px;
 }
 .trust i {
@@ -506,7 +512,7 @@ kbd {
   transform: rotate(7deg);
   font-size: 15.6px;
   white-space: nowrap;
-  color: #76707e;
+  color: var(--muted);
   letter-spacing: 0.48px;
 }
 .hand-note svg {
@@ -610,7 +616,7 @@ kbd {
 .section-kicker {
   font: 10.8px monospace;
   letter-spacing: 2.4px;
-  color: #80749b;
+  color: var(--muted);
 }
 .section-heading {
   text-align: center;
@@ -709,7 +715,7 @@ p {
 }
 .step-label > span {
   font: 12px monospace;
-  color: #8a7ca1;
+  color: var(--muted);
 }
 .step-label h3 {
   font-size: 20.4px;
@@ -768,7 +774,7 @@ p {
 .product figcaption {
   text-align: center;
   font: 10.8px monospace;
-  color: #746e80;
+  color: var(--muted);
   margin-top: 19.2px;
 }
 .privacy {
@@ -800,7 +806,7 @@ p {
 .local-tag {
   margin-left: auto;
   font: 10.8px monospace;
-  color: #7b7389;
+  color: var(--muted);
   letter-spacing: 1.2px;
 }
 .faq {
@@ -903,7 +909,7 @@ p {
 }
 .footer-top > span {
   font-size: 12px;
-  color: #787280;
+  color: var(--muted);
 }
 .footer-top > span:last-child {
   margin-left: auto;
@@ -914,7 +920,7 @@ p {
   justify-content: space-between;
   gap: 18px;
   font-size: 10.8px;
-  color: #79727f;
+  color: var(--muted);
   padding: 24px 0 36px;
 }
 .footer-bottom a {
@@ -1376,6 +1382,170 @@ html[lang="en"] .hand-note {
   html[lang="en"] .steps article {
     grid-template-columns: 100px minmax(0, 1fr);
     column-gap: 12px;
+  }
+}
+.release-note {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 18px 0 0;
+}
+.download {
+  scroll-margin-top: 28px;
+}
+.download .section-heading p {
+  max-width: 680px;
+  margin-inline: auto;
+}
+.download-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 48px;
+  margin-top: 40px;
+}
+.download-candidate {
+  padding: 36px;
+  background: #fff;
+  border: 1px solid #ded9ec;
+  border-radius: 20px;
+}
+.candidate-label {
+  display: inline-block;
+  color: #664507;
+  background: #fff1cd;
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.download h3 {
+  font-size: 21px;
+  margin: 20px 0 12px;
+}
+.download h3 span {
+  font-size: 15px;
+  color: var(--muted);
+}
+.download p {
+  font-size: 15px;
+  color: var(--muted);
+  line-height: 1.85;
+}
+.download .button {
+  margin-block: 12px;
+}
+.text-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: fit-content;
+  min-height: 44px;
+  color: #5846bd;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.download-help {
+  padding-block: 12px;
+}
+.download-help article + article {
+  border-top: 1px solid #dfdce7;
+  margin-top: 24px;
+  padding-top: 8px;
+}
+.footer-bottom {
+  flex-wrap: wrap;
+}
+.footer-links {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  flex-basis: 100%;
+  font-size: 13px;
+}
+.footer-links a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+@media (max-width: 1000px) {
+  .nav {
+    gap: 24px;
+  }
+  .nav nav:not(.language) {
+    gap: 20px;
+  }
+  .nav-right {
+    margin-left: auto;
+    gap: 16px;
+  }
+}
+@media (max-width: 700px) {
+  .nav > nav {
+    display: none;
+  }
+  .nav-github {
+    display: none;
+  }
+  .nav .language {
+    gap: 4px;
+    font-size: 13px;
+  }
+  html[lang="en"] .hero h1 {
+    font-size: clamp(32px, 11vw, 48px);
+    letter-spacing: -2px;
+  }
+  .hero-copy,
+  html[lang="en"] .hero-copy,
+  .section-heading p,
+  .product-copy p,
+  .product-copy li,
+  .privacy p,
+  .questions details p,
+  .closing p {
+    font-size: 15px;
+    line-height: 1.8;
+  }
+  .hero-actions {
+    flex-wrap: wrap;
+  }
+  .button,
+  .closing .button {
+    min-height: 48px;
+    font-size: 14px;
+    padding: 13px 18px;
+  }
+  .trust {
+    flex-wrap: wrap;
+    font-size: 12px;
+    row-gap: 8px;
+  }
+  .boards button,
+  .message-meta button {
+    min-height: 44px;
+  }
+  .questions summary {
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  .download-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    margin-top: 28px;
+  }
+  .download-candidate {
+    padding: 24px;
+  }
+  .download h2 {
+    font-size: 28px;
+  }
+  .footer-bottom,
+  .footer-top > span {
+    font-size: 12px;
+  }
+  .footer-links {
+    gap: 4px 20px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

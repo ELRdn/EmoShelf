@@ -1,0 +1,157 @@
+name: Unsigned Windows release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: SemVer without the leading v
+        required: true
+        default: 1.0.0
+      confirmation:
+        description: Type UNSIGNED_v1.0.0 to prepare an unpublished draft
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: unsigned-release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      ci-run-id: ${{ steps.ci.outputs.run-id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Require fixed version, public main and a new release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$REPOSITORY_PRIVATE" = false
+          test "$RELEASE_VERSION" = 1.0.0
+          test "$CONFIRMATION" = UNSIGNED_v1.0.0
+          node -e "for (const f of ['./app/package.json','./app/src-tauri/tauri.conf.json']) { if (require(f).version !== process.env.RELEASE_VERSION) process.exit(1) }"
+          if git rev-parse --verify "refs/tags/v$RELEASE_VERSION" >/dev/null 2>&1; then
+            echo '::error::Release tag already exists'; exit 1
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq '.[].tag_name' > release-tags.txt
+          if grep -Fxq "v$RELEASE_VERSION" release-tags.txt; then
+            echo '::error::Release already exists'; exit 1
+          fi
+      - name: Select successful CI for this exact source commit
+        id: ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run list --workflow ci.yml --commit "$GITHUB_SHA" --event push --limit 1 --json databaseId,headSha,conclusion > ci.json
+          node --input-type=module -e "import fs from 'node:fs'; const r=JSON.parse(fs.readFileSync('ci.json'))[0]; if (!r || r.headSha!==process.env.GITHUB_SHA || r.conclusion!=='success') throw Error('Exact commit requires successful CI'); fs.appendFileSync(process.env.GITHUB_OUTPUT, 'run-id='+r.databaseId+'\n');"
+
+  verify:
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: windows-latest
+            bundle: nsis
+          - arch: aarch64
+            runner: windows-11-arm
+            bundle: nsis
+          - arch: x86_64
+            runner: windows-latest
+            bundle: msi
+          - arch: aarch64
+            runner: windows-11-arm
+            bundle: msi
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/download-artifact@v8
+        with:
+          name: emoshelf-windows-${{ matrix.arch }}-${{ matrix.bundle }}
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.preflight.outputs.ci-run-id }}
+          path: candidate
+      - run: pnpm --dir app install --frozen-lockfile
+      - run: cargo install tauri-driver --locked
+      - name: Add matching EdgeDriver
+        shell: pwsh
+        run: |
+          if (-not $env:EDGEWEBDRIVER) { throw 'EDGEWEBDRIVER is unavailable' }
+          $env:EDGEWEBDRIVER | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Verify installer, run installed application tests and uninstall
+        shell: pwsh
+        env:
+          RELEASE_ARCH: ${{ matrix.arch }}
+          RELEASE_BUNDLE: ${{ matrix.bundle }}
+          SOURCE_CI_RUN: ${{ needs.preflight.outputs.ci-run-id }}
+        run: |
+          $extension = if ($env:RELEASE_BUNDLE -eq 'nsis') { '.exe' } else { '.msi' }
+          $files = @(Get-ChildItem candidate -Recurse -File | Where-Object Extension -eq $extension)
+          if ($files.Count -ne 1) { throw 'Expected exactly one installer' }
+          $installer = $files[0].FullName
+          $before = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
+          & app/tools/verify-unsigned-installer.ps1 -Installer $installer -InstallRoot (Join-Path $env:RUNNER_TEMP 'EmoShelfUnsigned')
+          if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne $before) { throw 'Installer changed during qualification' }
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          $suffix = if ($extension -eq '.exe') { '-setup.exe' } else { '.msi' }
+          $name = "EmoShelf_1.0.0_windows-$($env:RELEASE_ARCH)_UNSIGNED$suffix"
+          Copy-Item -LiteralPath $installer -Destination (Join-Path release $name)
+          @{ commit=$env:GITHUB_SHA; sourceCiRun=$env:SOURCE_CI_RUN; verificationRun=$env:GITHUB_RUN_ID; architecture=$env:RELEASE_ARCH; bundle=$env:RELEASE_BUNDLE; file=$name; sha256=$before.ToLowerInvariant(); authenticode='NotSigned'; installedE2E='passed'; uninstall='passed'; updateMode='manual' } |
+            ConvertTo-Json | Set-Content "release/provenance-$($env:RELEASE_ARCH)-$($env:RELEASE_BUNDLE).json" -Encoding utf8
+      - uses: actions/upload-artifact@v7
+        with:
+          name: qualified-unsigned-${{ matrix.arch }}-${{ matrix.bundle }}
+          if-no-files-found: error
+          path: release/*
+
+  draft:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: qualified-unsigned-*
+          merge-multiple: true
+          path: release
+      - name: Create checksums and keep the release unpublished
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(find release -maxdepth 1 -name '*_UNSIGNED-setup.exe' | wc -l)" -eq 2
+          test "$(find release -maxdepth 1 -name '*_UNSIGNED.msi' | wc -l)" -eq 2
+          node app/tools/release-manifest.mjs checksums --directory release --output release/SHA256SUMS.txt
+          gh release create v1.0.0 release/* --target "$GITHUB_SHA" --title 'EmoShelf v1.0.0 (unsigned)' --notes-file RELEASE_NOTES.md --draft

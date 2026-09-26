@@ -2,7 +2,7 @@
 
 ## Supported version
 
-Security fixes target the latest signed stable release. Pre-release and unsigned CI artifacts are not supported distributions.
+Security fixes target the latest published stable release, including unsigned releases under our distribution policy. Until a stable release is published, reports for the current public RC are also accepted. CI artifacts are not supported distributions.
 
 ## Reporting a vulnerability
 
@@ -14,7 +14,7 @@ Include the affected version, Windows architecture, impact, reproduction conditi
 
 ## Trust boundaries
 
-- Official Windows artifacts must have a valid Authenticode signature issued through SignPath Foundation.
-- Updater artifacts must also pass Tauri's separate update-signature verification.
+- Official Windows installers are explicitly unsigned and published only on the project GitHub Releases with SHA-256 checksums. Windows cannot verify the publisher through a certificate. See [the distribution policy](./CODE_SIGNING_POLICY.md).
+- Current builds use manual updates. Any future automatic updater must pass Tauri's separate update-signature verification; unsigned distribution does not relax that boundary.
 - Renderer packs use a distinct Ed25519 key and are rejected when signatures, hashes, paths, licenses, or compatibility metadata are invalid.
 - The repository never stores private signing keys or passwords.

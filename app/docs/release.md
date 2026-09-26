@@ -1,83 +1,69 @@
 # v1.0 Release Runbook
 
-The signed release workflow prepares an **unpublished draft** from `main` after the
-repository is public and signing setup is complete. Qualify its actual bytes before
-public promotion; do not rebuild an already qualified candidate.
-The exact commit selected for release must also have a successful `CI` push run; a prior commit's result is not accepted.
+The current distribution plan is **unsigned Windows installers with manual updates**.
+Code signing is not a release blocker. Quality and artifact verification remain
+required. See [the distribution policy](../../CODE_SIGNING_POLICY.md).
 
-## External setup
+## Prepare the exact candidate
 
-1. Enable MFA on GitHub and SignPath.
-2. Make the repository public only after the history, secret, generated-output, and license audit is accepted.
-3. Apply to SignPath Foundation and connect the GitHub App.
-4. Create SignPath project `emoshelf`, policy `release-signing`, and ZIP-root artifact configurations:
-   - `windows-executable`
-   - `windows-installers`
-5. Create a protected GitHub environment named `production-signing` with the release approver.
-6. Add repository variable `SIGNPATH_ORGANIZATION_ID`.
-7. Add secrets:
-   - `SIGNPATH_API_TOKEN`
-   - `EMOSHELF_UPDATER_PRIVATE_KEY`
-   - `EMOSHELF_UPDATER_PRIVATE_KEY_PASSWORD`
-   - `EMOSHELF_UPDATER_PUBLIC_KEY`
-   - `EMOSHELF_RENDERER_PRIVATE_KEY`
-   - `EMOSHELF_RENDERER_PRIVATE_KEY_PASSWORD`
-   - `EMOSHELF_RENDERER_PUBLIC_KEY_BASE64`
+1. Review the source, secret history, licenses and [qualification record](release-qualification.md).
+2. Freeze a clean commit on `main`. Require a successful `CI` push run for that exact
+   commit, including native x64/ARM64 E2E and NSIS/MSI packaging.
+3. Run **Unsigned Windows release** (`release-unsigned.yml`) from that commit:
+   `version: 1.0.0`, `confirmation: UNSIGNED_v1.0.0`.
+4. The workflow downloads installers from that exact CI run, verifies `NotSigned`,
+   installs each in an isolated runner, runs real-window E2E against the installed
+   executable, and uninstalls it. It renames files with `UNSIGNED`, records their
+   SHA-256 and provenance, then creates an **unpublished draft**.
+5. Download and qualify the draft's exact bytes. Do not rebuild after qualification.
 
-The updater and renderer key pairs must be generated independently. Keep encrypted private-key backups in the maintainer's user profile; never add them to the repository.
+The workflow needs the standard GitHub token, no SignPath or private signing keys.
+Its new path still needs a successful GitHub Actions run; local YAML validation
+does not prove installer qualification. Current published RC 1 does not contain
+the latest source changes.
 
-The Windows build matrix isolates NSIS and MSI. Tauri writes updater bundle metadata into the unsigned
-application before SignPath signs it; the final bundle step then verifies that the signed executable's
-SHA-256 is unchanged. The installed executable's Authenticode status is checked again after silent install.
+## Qualification before public promotion
 
-## Candidate qualification before public promotion
+Use `release-qualification.md` for the complete compatibility matrix. Record the
+exact source commit, installer hash, build date, OS/app versions and reviewer outside
+tracked source. Include:
 
-The reliability refresh is **not yet qualified for public launch**. Use
-[`release-qualification.md`](release-qualification.md) for the current evidence,
-the app compatibility matrix and remaining blockers. Freeze one candidate, finish
-the 30-click/30-Enter matrix and five business days, and run `pnpm release:readiness`
-against its exact commit and installer. Review the recordings; a passing unit test
-or an `input-sent` native result is not external editor acceptance.
+- 30 click and 30 Enter insertion trials per supported external text target.
+- Pinned focus restoration, tray/reopen, backups, persistence and recovery.
+- Installation, manual upgrade from RC with backup, and uninstallation.
+- Narrator, keyboard/IME, 125/150/200% display scales and multiple monitors.
+- At least 30 warm reveal/search samples; frame/focus p95 <=300 ms and search p95 <=100 ms.
+- Five distinct business days on the frozen candidate without core regressions.
 
-- Record the original Windows display scale.
-- Verify 125%, 150%, and 200%, then restore and record the original scale.
-- Verify keyboard-only use, Narrator, large text, contrast, and Reduced Motion.
-- Verify `Alt+E` with at least 30 warm samples and record frame/focus p95.
-- Verify the complete Notepad, Edge, Chrome, Claude unsent-draft, Photoshop, Paint and Explorer matrix in the qualification record, plus Pinned focus restoration, Tray, Autostart, single instance, and multiple monitors.
-- Verify motion on a 120/144Hz-or-higher display.
-- Confirm clean worktree, no untracked build output, secret-history audit, and third-party licenses.
-- Confirm SignPath approval and the `production-signing` environment reviewer.
+Use `distributionMode: "unsigned"`, `updateMode: "manual"` in the evidence.
+Both architecture distribution checks record `authenticode: "NotSigned"` and
+`checksumMatches: true` after actual verification. These values describe
+distribution, not safety guarantees.
 
-## Dispatch
+Run `pnpm release:readiness <evidence.json> <commit> <installer>` for each installer.
+Review recordings and dates as well as the tool result. Missing evidence fails.
+A native `input-sent` result alone is not proof of insertion into the external editor.
 
-Run **Signed Windows release** from `main` with:
+## Promote and connect the landing page
 
-```text
-version: 1.0.0
-confirmation: RELEASE_v1.0.0
-```
+1. Attach reviewed evidence and obtain explicit publication approval.
+2. Promote the existing draft without rebuilding or replacing assets:
+   `gh release edit v1.0.0 --draft=false --latest`.
+3. Independently download each public file, match `SHA256SUMS.txt`, and verify the
+   manual upgrade path from RC 1. No unsigned updater feed is published.
+4. Update `lp/src/config.ts` and the Japanese/English download copy to the verified
+   public release. Update screenshots if the candidate differs.
+5. Remove the development-preview `noindex, nofollow` and update its assertion in
+   `tools/lp-audit.mjs` only when the matching public release and copy are ready.
+   Run the LP build/audit and browser checks, then deploy after approval.
+6. Recheck live download links, mobile layout and manual-update instructions before ads.
 
-The workflow creates only a draft after x64/ARM64 Authenticode, updater signatures,
-renderer signatures, silent install, real-window E2E and uninstall gates pass.
-Installed-app E2E uses the external Tauri driver; production binaries never contain
-the embedded automation plugin. This workflow change still needs a signed CI run.
+Current local polish is not a five-day qualification or a public release. If the
+candidate changes, rerun affected checks and restart its stability record.
 
-## Promote the same qualified bytes
+## Optional future signed release
 
-1. Download the draft's exact installers and `SHA256SUMS.txt` using authenticated GitHub access.
-2. Record its source commit, each installer hash, OS/app versions and all acceptance
-   evidence outside tracked source. Finish the full matrix and five business days.
-3. Run `pnpm release:readiness <evidence.json> <commit> <installer>` for each released
-   installer. The report must name that installer's hash; review actual signatures,
-   recordings and dates as well as the completeness result.
-4. Attach the reviewed evidence to the draft. Obtain explicit publication approval.
-5. Promote without rebuilding or replacing any asset:
-
-```powershell
-gh release edit v1.0.0 --draft=false --latest
-```
-
-Then verify the public `releases/latest/download/latest.json` endpoint, both platform
-URLs/signatures, and a download/update from the supported RC. Do not start ads until
-those checks pass. If the candidate changes, repeat affected checks and restart its
-five-day qualification; keep the new candidate a draft.
+`release.yml` retains the SignPath workflow for future use. It requires SignPath
+approval, the `production-signing` environment, and the secrets/variables named in
+its preflight. Updater and renderer keys must be separate and independently verified.
+Unsigned distribution never authorizes disabling their cryptographic checks.

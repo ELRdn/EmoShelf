@@ -37,6 +37,8 @@ for (const file of [
   ".github/ISSUE_TEMPLATE/feature_request.yml",
   ".github/workflows/ci.yml",
   ".github/workflows/release.yml",
+  ".github/workflows/release-unsigned.yml",
+  "app/tools/verify-unsigned-installer.ps1",
   ".signpath/policies/emoshelf/release-signing.yml",
   "images/brand/emoshelf-icon-master.png",
   "images/screenshots/emoshelf-v1-shelf.png",
@@ -77,12 +79,27 @@ if (/Planning \/ pre-alpha|will be added once/i.test(readme)) {
 }
 if (
   !text("CODE_SIGNING_POLICY.md").includes(
-    "Free code signing provided by SignPath.io, certificate by SignPath Foundation",
-  )
+    "without Authenticode code signing",
+  ) ||
+  !text("CODE_SIGNING_POLICY.md").includes("manual updates")
 ) {
   fail(
-    "CODE_SIGNING_POLICY.md is missing the required SignPath Foundation attribution",
+    "Distribution policy must disclose unsigned installers and manual updates",
   );
+}
+
+const unsignedWorkflow = text(".github/workflows/release-unsigned.yml");
+for (const marker of [
+  "UNSIGNED_v1.0.0",
+  "source commit",
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions expression, not JavaScript interpolation.
+  "run-id: ${{ needs.preflight.outputs.ci-run-id }}",
+  "verify-unsigned-installer.ps1",
+  "SHA256SUMS.txt",
+  "--draft",
+]) {
+  if (!unsignedWorkflow.includes(marker))
+    fail(`unsigned release workflow is missing required gate: ${marker}`);
 }
 
 const ci = text(".github/workflows/ci.yml");
@@ -127,10 +144,14 @@ for (const [renderer, source] of Object.entries(rendererSources)) {
   }
 }
 
-const tracked = execFileSync("git", ["ls-files", "-z"], {
-  cwd: repositoryRoot,
-  encoding: "utf8",
-})
+const tracked = execFileSync(
+  "git",
+  ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+  {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  },
+)
   .split("\0")
   .filter(Boolean);
 for (const file of tracked) {
@@ -165,6 +186,6 @@ if (failures.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    `EmoShelf release audit passed (${tracked.length} tracked files checked).`,
+    `EmoShelf release audit passed (${tracked.length} candidate source files checked, including untracked non-ignored files).`,
   );
 }

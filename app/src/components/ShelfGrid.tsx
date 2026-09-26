@@ -15,7 +15,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { AppLocale } from "../lib/emoji";
+import { type AppLocale, findByEmoji } from "../lib/emoji";
 import { translate } from "../lib/i18n";
 import type { RendererId, ShelfItem } from "../lib/state";
 import { CustomAssetArtwork } from "./CustomAssetArtwork";
@@ -32,6 +32,16 @@ interface ShelfGridProps {
   onFocusItem?: (item: ShelfItem) => void;
   onRemove: (itemId: string) => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
+}
+
+function itemLabel(item: ShelfItem, locale: AppLocale): string {
+  if (item.type !== "unicode") return item.display.name;
+  const entry = findByEmoji(item.payload, locale);
+  // Translate catalog names saved in the other language; retain custom labels.
+  return entry &&
+    [entry.label, entry.alternateLabel].includes(item.display.name)
+    ? entry.label
+    : item.display.name;
 }
 
 function glowClass(item: ShelfItem, enabled: boolean): string {
@@ -81,7 +91,7 @@ function SortableShelfItem({
       style={{ transform: CSS.Transform.toString(transform), transition }}
     >
       <button
-        aria-label={`${item.display.name} — ${locale === "ja" ? "並べ替え" : "reorder"}`}
+        aria-label={`${itemLabel(item, locale)} — ${locale === "ja" ? "並べ替え" : "reorder"}`}
         className="tile-main-button"
         onClick={onSelect}
         type="button"
@@ -103,7 +113,7 @@ function SortableShelfItem({
         </span>
       </button>
       <button
-        aria-label={`${translate(locale, "removeFromShelf")}: ${item.display.name}`}
+        aria-label={`${translate(locale, "removeFromShelf")}: ${itemLabel(item, locale)}`}
         className="tile-remove-button"
         onClick={onRemove}
         type="button"
@@ -181,12 +191,12 @@ export function ShelfGrid({
         return (
           <li key={item.id}>
             <button
-              aria-label={item.display.name}
+              aria-label={itemLabel(item, locale)}
               data-shelf-item-id={item.id}
               className={`emoji-tile shelf-tile${selectedId === item.id ? " is-selected" : ""}${glowClass(item, shelfGlow)}`}
               onClick={() => onSelect(item)}
               onFocus={() => onFocusItem?.(item)}
-              title={item.display.name}
+              title={itemLabel(item, locale)}
               type="button"
             >
               {item.type === "image" ? (

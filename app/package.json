@@ -7,6 +7,7 @@
   "scripts": {
     "lp:dev": "vite --config lp/vite.config.ts",
     "lp:build": "tsc --project lp/tsconfig.json && vite build --config lp/vite.config.ts",
+    "lp:audit": "node tools/lp-audit.mjs",
     "lp:preview": "vite preview --config lp/vite.config.ts --host 127.0.0.1 --port 5174",
     "dev": "vite",
     "build": "tsc && vite build && node tools/check-bundle-size.mjs",
@@ -18,7 +19,7 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "check": "tsc --noEmit && biome check . && vitest run && node --test tools/*.node-test.mjs",
-    "test:e2e": "wdio run e2e/wdio.conf.mjs",
+    "test:e2e": "node tools/run-e2e.mjs",
     "release:audit": "node tools/release-audit.mjs",
     "release:latest-json": "node tools/release-manifest.mjs latest-json",
     "release:checksums": "node tools/release-manifest.mjs checksums",

@@ -15,7 +15,7 @@
   --border-strong: #484753;
   --text: #f5f5f7;
   --text-secondary: #a9a7b1;
-  --text-muted: #7c7a85;
+  --text-muted: #9794a1;
   --purple: #8b7cff;
   --purple-hover: #a69afd;
   --purple-soft: rgb(139 124 255 / 14%);
@@ -37,7 +37,7 @@
   --border-strong: #b5b1c2;
   --text: #202026;
   --text-secondary: #5f5c68;
-  --text-muted: #827f8c;
+  --text-muted: #686573;
   --purple: #6f5ee8;
   --purple-hover: #5948d4;
   --purple-soft: rgb(111 94 232 / 12%);
@@ -60,7 +60,7 @@
     --border-strong: #b5b1c2;
     --text: #202026;
     --text-secondary: #5f5c68;
-    --text-muted: #827f8c;
+    --text-muted: #686573;
     --purple: #6f5ee8;
     --purple-hover: #5948d4;
     --purple-soft: rgb(111 94 232 / 12%);
@@ -1164,6 +1164,21 @@ kbd {
   border-top-color: var(--purple);
   border-radius: 50%;
   animation: spin 800ms linear infinite;
+}
+
+.loading-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.loading-error {
+  max-width: 420px;
+  padding: 24px;
+  text-align: center;
+  line-height: 1.8;
+}
+.loading-error .primary-button {
+  margin-top: 12px;
 }
 
 @keyframes spin {

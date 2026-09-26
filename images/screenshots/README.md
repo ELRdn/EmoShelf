@@ -12,7 +12,7 @@ uses its matching language; the landing page follows its language selector.
 These are original window captures saved losslessly as PNG. The app rendered at
 2× device scale; the images were not enlarged or reconstructed from the previous
 803 × 603 JPEG. They show development UI, not the published RC 1 or a qualified
-signed release. See the [qualification record](../../app/docs/release-qualification.md).
+stable release. See the [qualification record](../../app/docs/release-qualification.md).
 
 ## Capture provenance
 

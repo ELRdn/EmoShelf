@@ -10,6 +10,8 @@ test("missing/manual-pending evidence never approves a release", () => {
 });
 test("requires repetitions, timings, five separate weekdays and matching artifact", () => {
   const report = {
+    distributionMode: "unsigned",
+    updateMode: "manual",
     sourceClean: true,
     osBuild: "synthetic-windows-build",
     reviewer: "synthetic-reviewer",
@@ -28,6 +30,8 @@ test("requires repetitions, timings, five separate weekdays and matching artifac
           clickTrials: 30,
           enterTrials: 30,
           errors: 0,
+          authenticode: "NotSigned",
+          checksumMatches: true,
         },
       ]),
     ),
@@ -50,6 +54,15 @@ test("requires repetitions, timings, five separate weekdays and matching artifac
   assert.deepEqual(
     assessReadiness(report, report.commit, report.artifactSha256),
     [],
+  );
+  const badDistribution = structuredClone(report);
+  badDistribution.checks["distribution-arm64"].authenticode = "UnknownError";
+  badDistribution.checks["distribution-x64"].checksumMatches = false;
+  badDistribution.updateMode = "verified-updater";
+  assert.equal(
+    assessReadiness(badDistribution, report.commit, report.artifactSha256)
+      .length,
+    3,
   );
   assert.ok(
     assessReadiness(report, "c".repeat(40), report.artifactSha256).length,

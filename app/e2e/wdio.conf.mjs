@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,36 +9,35 @@ const profile =
 const application =
   process.env.EMOSHELF_E2E_BINARY ??
   path.join(appRoot, "src-tauri", "target", profile, binaryName);
-function failIfCommandFailed(result, label) {
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    throw new Error(`${label} failed with exit code ${result.status}`);
-  }
-}
+const installed = Boolean(process.env.EMOSHELF_E2E_BINARY);
 
 export const config = {
+  ...(installed
+    ? {
+        hostname: "127.0.0.1",
+        port: Number(process.env.EMOSHELF_E2E_PORT),
+        path: "/",
+      }
+    : {}),
   specs: ["./specs/**/*.e2e.mjs"],
   maxInstances: 1,
-  services: [
-    [
-      "@wdio/tauri-service",
-      {
-        appBinaryPath: application,
-        // Shipping binaries intentionally omit the embedded automation plugin.
-        driverProvider: process.env.EMOSHELF_E2E_BINARY
-          ? "external"
-          : "embedded",
-        embeddedPort: 4445,
-        startTimeout: 120_000,
-        statusPollTimeout: 10_000,
-      },
-    ],
-  ],
+  services: installed
+    ? []
+    : [
+        [
+          "@wdio/tauri-service",
+          {
+            appBinaryPath: application,
+            driverProvider: "embedded",
+            embeddedPort: 4445,
+            startTimeout: 120_000,
+            statusPollTimeout: 10_000,
+          },
+        ],
+      ],
   capabilities: [
     {
-      browserName: "tauri",
+      browserName: installed ? "wry" : "tauri",
       maxInstances: 1,
       "tauri:options": { application },
     },
@@ -51,33 +49,4 @@ export const config = {
   waitforTimeout: 15_000,
   connectionRetryTimeout: 120_000,
   connectionRetryCount: 2,
-  onPrepare() {
-    if (process.env.EMOSHELF_E2E_SKIP_BUILD === "1") {
-      return;
-    }
-    const result = spawnSync(
-      "pnpm",
-      [
-        "tauri",
-        "build",
-        "--no-bundle",
-        "--ci",
-        "--config",
-        "src-tauri/tauri.e2e.conf.json",
-        "--features",
-        "wdio",
-      ],
-      {
-        cwd: appRoot,
-        env: {
-          ...process.env,
-          NODE_ENV: "production",
-          VITE_EMOSHELF_E2E: "1",
-        },
-        shell: true,
-        stdio: "inherit",
-      },
-    );
-    failIfCommandFailed(result, "Tauri E2E build");
-  },
 };

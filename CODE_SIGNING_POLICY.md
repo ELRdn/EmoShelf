@@ -1,44 +1,53 @@
-# EmoShelf Code-Signing Policy
+# EmoShelf Distribution and Code-Signing Policy
 
-EmoShelf publishes formal Windows releases only after automated source builds, independent verification, and manual release approval.
+EmoShelf distributes Windows installers **without Authenticode code signing**.
+This applies to planned stable releases as well as release candidates. The project
+does not currently receive code signing from SignPath. Signing is a possible future
+improvement, not a condition for the current distribution plan.
 
-**Free code signing provided by SignPath.io, certificate by SignPath Foundation**
-
-## Project identity
+## Official source
 
 - Product: EmoShelf
-- Publisher displayed by the application: `ELRdn + Contributors`
+- Application publisher label: `ELRdn + Contributors` (not a verified certificate identity)
 - Source and releases: <https://github.com/ELRdn/EmoShelf>
 - Support: <https://github.com/ELRdn/EmoShelf/issues>
-- Privacy statement: [PRIVACY.md](./PRIVACY.md)
+- Privacy: [PRIVACY.md](./PRIVACY.md)
 
-## Roles
+Download from the project's GitHub Releases. Official unsigned installers use
+`UNSIGNED` in their filenames and include `SHA256SUMS.txt`. Windows may show an
+unknown-publisher or SmartScreen warning. A matching hash verifies that the file
+matches the published checksum; it does not authenticate the publisher or guarantee
+safety. Keep Windows protection enabled and follow the [installation guide](./README.md#install).
+Managed devices may prohibit unsigned apps.
 
-- Authors and reviewers: repository contributors and maintainers participating through GitHub pull requests.
-- Release approver: the `ELRdn` repository owner or a later explicitly documented project maintainer.
-- SignPath submitter: the GitHub Actions trusted-build integration, not a developer workstation.
+## Release controls
 
-MFA is required for GitHub and SignPath accounts involved in release approval.
+1. Select an exact reviewed `main` commit with successful CI and secret/license audits.
+2. Reuse x64 and ARM64 installers built by that CI run on native Windows runners.
+3. Verify unsigned status and SHA-256 of the actual application and distribution files.
+4. Test installation, real application operation and uninstallation for each installer.
+5. Prepare an unpublished draft with release notes, checksums and build provenance.
+6. Review qualification evidence for those exact files and obtain publication approval.
+7. Publish the qualified bytes without rebuilding or replacing them.
 
-## Signing order
+The `ELRdn` repository owner or a documented maintainer approves publication.
+Release accounts must use MFA. Workflow artifacts and local candidates are not
+published releases. See [the release runbook](./app/docs/release.md).
 
-1. Build the unbundled application on a GitHub-hosted native x64 or ARM64 Windows runner.
-2. In isolated NSIS and MSI jobs, let Tauri embed the matching installer type into the unsigned executable.
-3. Submit each type-specific application executable to SignPath and verify its Authenticode status.
-4. Build the matching installer around that signed executable and require its SHA-256 to remain unchanged during bundling.
-5. Submit the installer to SignPath and verify its Authenticode status.
-6. Sign the final installer bytes with the separate Tauri updater key and verify those signatures independently.
-7. Generate `latest.json` and SHA-256 checksums.
-8. Exercise silent install, verify the installed executable's Authenticode signature, run a real Tauri WebDriver session, and uninstall.
-9. Publish the immutable GitHub Release only after manual approval.
+## Updates and optional renderer packs
 
-The type-specific pre-bundle is required because Tauri writes updater bundle metadata into the executable.
-No workflow step may mutate application bytes after the application Authenticode signature is created.
+Current unsigned builds use **manual updates**. Export a `.emoshelf` backup, quit
+EmoShelf, and install the newer official release after verifying its checksum.
+The unsigned workflow does not publish a `latest.json` feed.
 
-All jobs leading to a SignPath request run on GitHub-hosted runners. The source policy in `.signpath/policies/emoshelf/release-signing.yml` rejects rerun-based signing.
+Authenticode, Tauri updater signatures, and renderer-pack signatures are separate
+mechanisms. Choosing unsigned installers does not disable updater or pack signature
+verification. Automatic updates and optional packs stay unavailable until their
+independent trusted keys and distribution flows are configured and tested. Twemoji
+is bundled; Native uses the operating system. Never commit private keys.
 
-## Key separation
+## Optional future signing
 
-The updater key and renderer-pack Ed25519 key are generated independently, password protected, and stored outside the repository in the maintainer's user profile and GitHub Secrets. Their public keys are compiled into formal release builds. Private key values, passwords, and sensitive signing logs must never be committed or printed.
-
-Unsigned artifacts may be used only for development or a clearly labelled release candidate when SignPath requires public project history. They must never be presented as formal `v1.0.0` artifacts.
+The existing signed workflow and `.signpath` policies remain available for future
+use. They require their own secrets, approval and validation and are not the current
+release path. No SignPath sponsorship or approval is claimed.

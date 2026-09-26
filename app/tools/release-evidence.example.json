@@ -1,4 +1,6 @@
 {
+  "distributionMode": "unsigned",
+  "updateMode": "manual",
   "commit": "",
   "sourceClean": false,
   "candidateBuiltAt": "",
@@ -113,13 +115,17 @@
       "evidence": "",
       "dates": []
     },
-    "signed-x64": {
+    "distribution-x64": {
       "status": "pending",
-      "evidence": ""
+      "evidence": "",
+      "authenticode": "",
+      "checksumMatches": false
     },
-    "signed-arm64": {
+    "distribution-arm64": {
       "status": "pending",
-      "evidence": ""
+      "evidence": "",
+      "authenticode": "",
+      "checksumMatches": false
     }
   }
 }

@@ -131,6 +131,7 @@ export function Onboarding({ locale, renderer, onFinish }: OnboardingProps) {
       <label className="search-field onboarding-search">
         <span aria-hidden="true">⌕</span>
         <input
+          aria-label={translate(locale, "searchPlaceholder")}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={translate(locale, "searchPlaceholder")}
           type="search"

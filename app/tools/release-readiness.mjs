@@ -24,13 +24,34 @@ export const requiredChecks = [
   "keyboard-ime",
   "performance",
   "five-business-days",
-  "signed-x64",
-  "signed-arm64",
+  "distribution-x64",
+  "distribution-arm64",
 ];
 
 /** Evidence lives outside tracked source so it can name the exact final commit. */
 export function assessReadiness(report, commit, artifactHash) {
   const errors = [];
+  if (!["unsigned", "authenticode"].includes(report?.distributionMode))
+    errors.push("Declare the actual distribution mode");
+  if (
+    report?.updateMode !== "manual" &&
+    report?.updateMode !== "verified-updater"
+  )
+    errors.push("Declare the actual update mode");
+  if (
+    report?.updateMode === "verified-updater" &&
+    (report?.checks?.["updater-signatures"]?.status !== "passed" ||
+      typeof report?.checks?.["updater-signatures"]?.evidence !== "string" ||
+      !report?.checks?.["updater-signatures"]?.evidence?.trim())
+  )
+    errors.push("Verified updater signature evidence is required");
+  for (const arch of ["x64", "arm64"]) {
+    const check = report?.checks?.[`distribution-${arch}`];
+    const expected =
+      report?.distributionMode === "unsigned" ? "NotSigned" : "Valid";
+    if (check?.authenticode !== expected || check?.checksumMatches !== true)
+      errors.push(`Distribution status/checksum not verified: ${arch}`);
+  }
   if (report?.sourceClean !== true)
     errors.push("Candidate source must be clean and frozen");
   for (const field of ["osBuild", "reviewer"]) {
@@ -137,7 +158,7 @@ if (
     );
     if (errors.length) throw Error(errors.join("\n"));
     console.log(
-      "Evidence completeness passed. Reviewer must verify recordings, dates, signatures and target versions before publishing.",
+      "Evidence completeness passed. Reviewer must verify recordings, dates, distribution status, checksums and target versions before publishing.",
     );
   } catch (error) {
     console.error(String(error));

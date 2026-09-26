@@ -3,6 +3,9 @@ import type { LocalePreference } from "./state";
 
 const ja = {
   loading: "Shelfを準備しています…",
+  catalogLoadFailed:
+    "絵文字を読み込めませんでした。再試行してください。繰り返す場合はアプリを開き直してください。保存済みの棚は削除されません。",
+  retryCatalog: "読み込みを再試行",
   welcomeTitle: "絵文字を、あなたの棚へ。",
   welcomeBody: "よく使う絵文字だけを並べて、Alt+Eから一瞬で呼び出せます。",
   getStarted: "はじめる",
@@ -141,8 +144,12 @@ const ja = {
   settingsBackupRestored: "設定をバックアップから復元しました",
   settingsBackupMissing: "設定バックアップがまだありません",
   updates: "アプリの更新",
-  updateUnavailableBuild: "正式なUpdater公開鍵が未設定の開発ビルドです。",
+  updateUnavailableBuild:
+    "この版は手動更新に対応しています。設定でバックアップを保存してから、EmoShelfの公式GitHub配布ページで新しいバージョンを確認してください。",
   checkUpdates: "更新を確認",
+  viewReleases: "公式配布ページを開く",
+  openReleasesFailed:
+    "ブラウザーを開けませんでした。https://github.com/ELRdn/EmoShelf/releases を開いてください。",
   checkingUpdates: "更新を確認中…",
   upToDate: "最新バージョンです",
   updateAvailable: "v{version}を利用できます",
@@ -162,6 +169,9 @@ const ja = {
 
 const en: Record<keyof typeof ja, string> = {
   loading: "Preparing your Shelf…",
+  catalogLoadFailed:
+    "The emoji could not be loaded. Try again, or reopen the app if it keeps happening. Your saved shelf has not been deleted.",
+  retryCatalog: "Retry loading",
   welcomeTitle: "Put your emojis on a shelf.",
   welcomeBody:
     "Keep the ones you use most and reach them instantly with Alt+E.",
@@ -303,8 +313,11 @@ const en: Record<keyof typeof ja, string> = {
   settingsBackupMissing: "No settings backup exists yet",
   updates: "App updates",
   updateUnavailableBuild:
-    "This development build does not include the production updater public key.",
+    "This version uses manual updates. Export a backup in Settings, then check the official EmoShelf releases on GitHub for a newer version.",
   checkUpdates: "Check for updates",
+  viewReleases: "Open official releases",
+  openReleasesFailed:
+    "Could not open your browser. Visit https://github.com/ELRdn/EmoShelf/releases.",
   checkingUpdates: "Checking for updates…",
   upToDate: "EmoShelf is up to date",
   updateAvailable: "v{version} is available",

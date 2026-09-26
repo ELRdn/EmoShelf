@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { ComposeTray } from "./components/ComposeTray";
@@ -228,6 +229,7 @@ function ModalShell({
   return (
     <dialog
       aria-labelledby="modal-title"
+      aria-modal="true"
       className="modal-backdrop"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
@@ -237,6 +239,7 @@ function ModalShell({
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
+          event.stopPropagation();
           onClose();
           return;
         }
@@ -339,14 +342,16 @@ function App() {
   const updateCheckStarted = useRef(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (catalogReady) {
-      return;
-    }
+  const retryCatalog = useCallback(() => {
+    setCatalogError("");
     void loadEmojiCatalogData()
       .then(() => setCatalogReady(true))
       .catch((error) => setCatalogError(String(error)));
-  }, [catalogReady]);
+  }, []);
+
+  useEffect(() => {
+    if (!catalogReady) retryCatalog();
+  }, [catalogReady, retryCatalog]);
 
   useEffect(() => {
     if (loaded && catalogReady) {
@@ -801,7 +806,13 @@ function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.isComposing || event.keyCode === 229 || event.repeat) return;
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.keyCode === 229 ||
+        event.repeat
+      )
+        return;
       if (modal && event.key !== "Escape") return;
       if (event.ctrlKey && event.key.toLowerCase() === "f") {
         event.preventDefault();
@@ -1008,8 +1019,23 @@ function App() {
           pinned={false}
         />
         <main className="loading-state" id="main-content">
-          <span aria-hidden="true" className="loading-orbit" />
-          {catalogError || translate(locale, "loading")}
+          {catalogError ? (
+            <div className="loading-error" role="alert">
+              <p>{translate(locale, "catalogLoadFailed")}</p>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={retryCatalog}
+              >
+                {translate(locale, "retryCatalog")}
+              </button>
+            </div>
+          ) : (
+            <div role="status" className="loading-progress">
+              <span aria-hidden="true" className="loading-orbit" />
+              {translate(locale, "loading")}
+            </div>
+          )}
         </main>
       </div>
     );
@@ -2645,16 +2671,24 @@ function App() {
                 <button
                   className="quiet-button"
                   disabled={
-                    !updaterConfigured ||
-                    updatePhase === "checking" ||
-                    updatePhase === "installing"
+                    updatePhase === "checking" || updatePhase === "installing"
                   }
-                  onClick={() => void checkUpdates(false)}
+                  onClick={() => {
+                    if (updaterConfigured) void checkUpdates(false);
+                    else
+                      void openUrl(
+                        "https://github.com/ELRdn/EmoShelf/releases",
+                      ).catch(() =>
+                        showToast(translate(locale, "openReleasesFailed")),
+                      );
+                  }}
                   type="button"
                 >
-                  {updatePhase === "checking"
-                    ? translate(locale, "checkingUpdates")
-                    : translate(locale, "checkUpdates")}
+                  {!updaterConfigured
+                    ? translate(locale, "viewReleases")
+                    : updatePhase === "checking"
+                      ? translate(locale, "checkingUpdates")
+                      : translate(locale, "checkUpdates")}
                 </button>
                 {availableUpdate ? (
                   <button

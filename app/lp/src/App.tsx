@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import screenshotEn from "../../../images/screenshots/emoshelf-en.png";
 import screenshotJa from "../../../images/screenshots/emoshelf-ja.png";
 import icon from "../../src-tauri/icons/128x128.png";
-import { socialLinks } from "./config";
+import { pageMetadata, releaseLinks, socialLinks } from "./config";
 import "./style.css";
 
 type Lang = "ja" | "en";
@@ -50,6 +50,24 @@ function Arrow({ diagonal = false }: { diagonal?: boolean }) {
 }
 const copy = {
   ja: {
+    download: "ダウンロード案内",
+    releaseNote: "正式版は準備中 · テスト用RCを公開しています",
+    downloadTitle: "はじめる前に、知っておきたいこと。",
+    downloadBody:
+      "Windows 11向けの無料アプリです。コード署名なしで提供します。現在入手できるのはテスト用のRC 1です。",
+    candidate: "テスト用 RC 1 · 未署名",
+    candidateBody:
+      "このページの開発版とは機能・見た目が異なります。Windowsに発行元を確認できない警告が出る場合があります。公式配布ページとSHA-256を確認し、手順を読んでからインストールしてください。",
+    releaseAction: "RC 1の配布ページ",
+    guideAction: "インストール手順を読む",
+    requirements: "対応環境",
+    requirementsBody:
+      "Windows 11 · x64 / ARM64。お使いのPCに合ったインストーラーを選んでください。macOS・Linux・スマートフォン用アプリはありません。",
+    firstUse: "最初の使い方",
+    firstUseBody:
+      "入力欄をクリック → Alt + E → 絵文字を選択。自動で入らないときは、入力欄に戻ってCtrl + V。アプリ内の「使い方」でも練習できます。",
+    support: "使い方・不具合の相談",
+    privacyLink: "プライバシー",
     how: "使い方",
     faq: "よくある質問",
     soon: "Windowsのための、小さな新定番。",
@@ -106,7 +124,7 @@ const copy = {
     questions: [
       [
         "どのWindowsで使えますか？",
-        "Windows 11向けに開発中です。x64・ARM64は、それぞれ実機検証と署名が完了した版を正式公開します。このページの体験デモはスマートフォンでも試せます。",
+        "Windows 11のx64・ARM64向けです。RC 1は両方のインストーラーを用意しています。お使いのPCに合ったものを選んでください。このページの体験デモはスマートフォンでも試せます。",
       ],
       [
         "無料で使えますか？",
@@ -122,7 +140,15 @@ const copy = {
       ],
       [
         "いつダウンロードできますか？",
-        "現在、正式公開に向けて準備中です。署名済みインストーラーの用意ができたら、XとGitHubでお知らせします。公開日はまだ決まっていません。",
+        "テスト用の未署名RC 1をGitHubで公開しています。今後の正式版も未署名で提供する方針です。ページ内のダウンロード案内で、違いとインストール手順をご確認ください。",
+      ],
+      [
+        "絵文字が入力欄に入らないときは？",
+        "入力したい欄を先にクリックしてからAlt + Eで呼び出してください。自動貼り付けができない場合は、元の入力欄でCtrl + Vを押せます。対応状況はアプリごとに異なります。",
+      ],
+      [
+        "絵文字の見た目も変えられますか？",
+        "開発版にはTwemojiとWindows標準の表示があります。貼り付け先では、そのアプリの絵文字フォントで表示されます。Fluent・Noto・OpenMojiの追加パックは配布準備中です。",
       ],
     ],
     final: "あなたの棚、もうすぐ。",
@@ -134,13 +160,31 @@ const copy = {
     skip: "本文へ移動",
   },
   en: {
+    download: "Get EmoShelf",
+    releaseNote: "Stable release in preparation · Unsigned test RC available",
+    downloadTitle: "A few things before you start.",
+    downloadBody:
+      "A free app for Windows 11, distributed without code signing. The available download is RC 1, a test build.",
+    candidate: "Test RC 1 · Unsigned",
+    candidateBody:
+      "Its features and appearance differ from the development preview on this page. Windows may show an unknown-publisher warning. Verify the official source and SHA-256, then read the install guide before running it.",
+    releaseAction: "View the RC 1 release",
+    guideAction: "Read the install guide",
+    requirements: "What you need",
+    requirementsBody:
+      "Windows 11 · x64 / ARM64. Choose the installer that matches your PC. There is no macOS, Linux, or mobile app.",
+    firstUse: "Your first paste",
+    firstUseBody:
+      "Click your text field → Alt + E → pick an emoji. If it does not appear, return to the field and press Ctrl + V. The app also has a private practice editor under How to use.",
+    support: "Help & issue reports",
+    privacyLink: "Privacy",
     how: "How it works",
     faq: "FAQ",
     soon: "A little new favorite for Windows.",
     line1: "Your favorites.",
     line2: "Within reach.",
-    intro: "Keep the emoji you love on your shelf. Press Alt + E,",
-    intro2: "pick one, and get back to the conversation.",
+    intro: "Keep your favorite emoji on your shelf.",
+    intro2: "Press Alt + E, pick, and get back to it.",
     follow: "Follow on X",
     try: "Try the shelf",
     free: "Free & open source",
@@ -189,7 +233,7 @@ const copy = {
     questions: [
       [
         "Which Windows versions are supported?",
-        "EmoShelf is being developed for Windows 11. Each x64 or ARM64 release requires its own device validation and signing. You can try this browser demo on your phone.",
+        "EmoShelf targets Windows 11 on x64 and ARM64. RC 1 has installers for both. Choose the one that matches your PC. You can try this browser demo on your phone.",
       ],
       [
         "Is it free?",
@@ -205,7 +249,15 @@ const copy = {
       ],
       [
         "When can I download it?",
-        "We are preparing the official release. We will share updates on X and GitHub when signed installers are ready. There is no confirmed release date yet.",
+        "An unsigned test RC 1 is available on GitHub. Future stable releases are also planned as unsigned downloads. See Get EmoShelf on this page for the differences and installation instructions.",
+      ],
+      [
+        "What if the emoji does not appear in my text field?",
+        "Click the destination text field before pressing Alt + E. If automatic insertion is unavailable, return to that field and press Ctrl + V. Compatibility varies by application.",
+      ],
+      [
+        "Can I change the emoji style?",
+        "The development build includes Twemoji and Windows native emoji. Pasted text uses the destination app's emoji font. Optional Fluent, Noto, and OpenMoji packs are not published yet.",
       ],
     ],
     final: "Your shelf is almost here.",
@@ -257,7 +309,9 @@ function Social({
   );
 }
 export default function App() {
-  const [lang, setLang] = useState<Lang>("ja");
+  const lang: Lang = /\/en(?:\/|\/index\.html)?$/.test(window.location.pathname)
+    ? "en"
+    : "ja";
   const [board, setBoard] = useState(0);
   const [selected, setSelected] = useState<Emoji | null>(null);
   const [notice, setNotice] = useState(false);
@@ -288,11 +342,11 @@ export default function App() {
           ];
   useEffect(() => {
     document.documentElement.lang = lang;
-    document.title = `EmoShelf — ${lang === "ja" ? "いつもの絵文字を、あなたの棚に。" : "Your favorites. Within reach."}`;
+    document.title = pageMetadata[lang].title;
     document
       .querySelector('meta[name="description"]')
-      ?.setAttribute("content", `${c.intro} ${c.intro2}`);
-  }, [lang, c]);
+      ?.setAttribute("content", pageMetadata[lang].description);
+  }, [lang]);
   useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(false), 4500);
@@ -318,42 +372,38 @@ export default function App() {
         >
           <a href="#how">{c.how}</a>
           <a href="#faq">{c.faq}</a>
+          <a href="#download">{c.download}</a>
         </nav>
         <div className="nav-right">
-          <fieldset className="language" aria-label="Language">
-            <button
-              type="button"
+          <nav className="language" aria-label="Language">
+            <a
               lang="ja"
-              aria-pressed={lang === "ja"}
-              onClick={() => setLang("ja")}
+              href={import.meta.env.BASE_URL}
+              hrefLang="ja"
+              aria-current={lang === "ja" ? "page" : undefined}
+              aria-label="日本語"
             >
               JA
-            </button>
+            </a>
             <span>/</span>
-            <button
-              type="button"
+            <a
               lang="en"
-              aria-pressed={lang === "en"}
-              onClick={() => setLang("en")}
+              href={`${import.meta.env.BASE_URL}en/`}
+              hrefLang="en"
+              aria-current={lang === "en" ? "page" : undefined}
+              aria-label="English"
             >
               EN
-            </button>
-          </fieldset>
-          <button
-            type="button"
+            </a>
+          </nav>
+          <a
             className="nav-github"
-            onClick={() =>
-              socialLinks.github
-                ? window.open(
-                    socialLinks.github,
-                    "_blank",
-                    "noopener,noreferrer",
-                  )
-                : setNotice(true)
-            }
+            href={socialLinks.github ?? releaseLinks.release}
+            target="_blank"
+            rel="noopener noreferrer"
           >
             GitHub <Arrow diagonal />
-          </button>
+          </a>
         </div>
       </header>
       <main id="main">
@@ -381,17 +431,16 @@ export default function App() {
             {c.intro2}
           </p>
           <div className="hero-actions">
-            <Social
-              lang={lang}
-              onPending={() => setNotice(true)}
-              channel="x"
-              className="primary"
-            />
+            <a href="#download" className="button primary">
+              {c.download}
+              <Arrow />
+            </a>
             <a href="#demo" className="button secondary">
               {c.try}
               <Arrow />
             </a>
           </div>
+          <p className="release-note">{c.releaseNote}</p>
           <div className="trust">
             <span>
               <span aria-hidden="true">⊞</span> Windows 11
@@ -610,6 +659,65 @@ export default function App() {
           </div>
           <span className="local-tag">LOCAL FIRST</span>
         </section>
+        <section
+          className="download wrap section"
+          id="download"
+          aria-labelledby="download-title"
+        >
+          <div className="section-heading">
+            <span className="section-kicker">GET EMOSHELF</span>
+            <h2 id="download-title">{c.downloadTitle}</h2>
+            <p>{c.downloadBody}</p>
+          </div>
+          <div className="download-grid">
+            <article className="download-candidate">
+              <span className="candidate-label">{c.candidate}</span>
+              <h3>
+                EmoShelf <span>{releaseLinks.version}</span>
+              </h3>
+              <p>{c.candidateBody}</p>
+              <a
+                className="button primary"
+                href={
+                  lang === "ja" ? releaseLinks.guideJa : releaseLinks.guideEn
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {c.guideAction}
+                <Arrow diagonal />
+              </a>
+              <a
+                className="text-link"
+                href={releaseLinks.release}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {c.releaseAction}
+                <Arrow diagonal />
+              </a>
+            </article>
+            <div className="download-help">
+              <article>
+                <h3>{c.requirements}</h3>
+                <p>{c.requirementsBody}</p>
+              </article>
+              <article>
+                <h3>{c.firstUse}</h3>
+                <p>{c.firstUseBody}</p>
+              </article>
+              <a
+                className="text-link"
+                href={releaseLinks.support}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {c.support}
+                <Arrow diagonal />
+              </a>
+            </div>
+          </div>
+        </section>
         <section className="faq wrap section" id="faq">
           <div>
             <span className="section-kicker">GOOD TO KNOW</span>
@@ -638,12 +746,10 @@ export default function App() {
           <h2>{c.final}</h2>
           <p>{c.finalBody}</p>
           <div className="hero-actions">
-            <Social
-              lang={lang}
-              onPending={() => setNotice(true)}
-              channel="x"
-              className="primary"
-            />
+            <a href="#download" className="button primary">
+              {c.download}
+              <Arrow />
+            </a>
             <Social
               lang={lang}
               onPending={() => setNotice(true)}
@@ -670,6 +776,32 @@ export default function App() {
           <span>Made for Windows. Made for you.</span>
         </div>
         <div className="footer-bottom">
+          <nav
+            className="footer-links"
+            aria-label={lang === "ja" ? "サポート" : "Support"}
+          >
+            <a
+              href={releaseLinks.privacy}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {c.privacyLink}
+            </a>
+            <a
+              href={releaseLinks.support}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {c.support}
+            </a>
+            <a
+              href={socialLinks.x ?? releaseLinks.release}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {c.follow}
+            </a>
+          </nav>
           <span>
             © 2026 EmoShelf · Apache-2.0 · {lang === "ja" ? "作者" : "By"}{" "}
             <a

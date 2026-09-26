@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   act,
   fireEvent,
@@ -11,9 +12,14 @@ import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import * as emojiCatalog from "./lib/emoji";
 import { getCatalog, getCategories } from "./lib/emoji";
 import { createInitialState } from "./lib/state";
 import { useShelfStore } from "./lib/store";
+
+const { hideWindow } = vi.hoisted(() => ({
+  hideWindow: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
@@ -28,9 +34,12 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn().mockResolvedValue(null),
   save: vi.fn().mockResolvedValue(null),
 }));
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openUrl: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({
-    hide: vi.fn().mockResolvedValue(undefined),
+    hide: hideWindow,
     minimize: vi.fn().mockResolvedValue(undefined),
     toggleMaximize: vi.fn().mockResolvedValue(undefined),
   }),
@@ -38,6 +47,7 @@ vi.mock("@tauri-apps/api/window", () => ({
 
 describe("EmoShelf UI", () => {
   beforeEach(() => {
+    hideWindow.mockClear();
     vi.mocked(invoke).mockReset();
     vi.mocked(invoke).mockImplementation(async (command) =>
       command === "paste_payload" || command === "paste_image_asset"
@@ -65,6 +75,43 @@ describe("EmoShelf UI", () => {
     expect(
       screen.getByRole("heading", { name: "最初の絵文字を選ぶ" }),
     ).toBeInTheDocument();
+  });
+
+  it("offers an actionable manual update when automatic updates are not configured", async () => {
+    useShelfStore.setState({ onboardingCompleted: true });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "設定" }));
+    const releases = screen.getByRole("button", {
+      name: "公式配布ページを開く",
+    });
+    expect(releases).toBeEnabled();
+    await user.click(releases);
+    expect(openUrl).toHaveBeenCalledWith(
+      "https://github.com/ELRdn/EmoShelf/releases",
+    );
+  });
+
+  it("recovers from a catalog loading failure without changing the saved shelf", async () => {
+    vi.spyOn(emojiCatalog, "isEmojiCatalogLoaded").mockReturnValue(false);
+    const loader = vi
+      .spyOn(emojiCatalog, "loadEmojiCatalogData")
+      .mockRejectedValueOnce(new Error("temporary catalog failure"))
+      .mockResolvedValueOnce(undefined);
+    const before = useShelfStore.getState().boards;
+    render(<App />);
+    const retry = await screen.findByRole("button", {
+      name: "読み込みを再試行",
+    });
+    expect(
+      screen.queryByText("temporary catalog failure"),
+    ).not.toBeInTheDocument();
+    fireEvent.click(retry);
+    expect(
+      await screen.findByRole("heading", { name: "絵文字を、あなたの棚へ。" }),
+    ).toBeInTheDocument();
+    expect(loader).toHaveBeenCalledTimes(2);
+    expect(useShelfStore.getState().boards).toBe(before);
   });
 
   it("has no serious accessibility violations on the welcome screen", async () => {
@@ -110,6 +157,7 @@ describe("EmoShelf UI", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "設定" })).toBeNull();
     expect(settingsButton).toHaveFocus();
+    expect(hideWindow).not.toHaveBeenCalled();
   });
 
   it("shows the personal Shelf after onboarding", () => {

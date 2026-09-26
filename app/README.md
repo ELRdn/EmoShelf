@@ -150,7 +150,7 @@ Windowsのキー送出は`SendInput`を使用。`input-sent`はOSがキー入力
 実Tauri E2EはTauri／WebdriverIOの推奨する埋め込みWebDriverとIPC支援を、テスト専用`wdio` Featureで有効化します。
 外部`tauri-driver`や手動の`msedgedriver`準備は不要で、正式ビルドにはテスト用プラグインを含めません。
 CIはx64と`windows-11-arm`の両方で同じ実ウィンドウ操作を検証します。
-署名済み公開手順と外部ゲートは[`docs/release.md`](docs/release.md)を参照してください。
+未署名配布・手動更新の公開手順と品質ゲートは[`docs/release.md`](docs/release.md)を参照してください。
 
 ```text
 EMOSHELF_UPDATER_PUBLIC_KEY

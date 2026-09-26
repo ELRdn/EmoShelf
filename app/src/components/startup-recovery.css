@@ -1,0 +1,27 @@
+.startup-recovery {
+  width: min(560px, calc(100% - 48px));
+  margin: 10vh auto;
+  padding: 32px;
+  color: var(--text, #f4f4f6);
+  background: var(--surface, #242329);
+  border: 1px solid var(--border, #4a4758);
+  border-radius: 20px;
+  line-height: 1.8;
+}
+.startup-recovery h1 {
+  font-size: clamp(20px, 4vw, 28px);
+  line-height: 1.4;
+}
+.recovery-brand {
+  font-size: 48px;
+}
+.startup-recovery .primary-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  margin-block: 16px;
+}
+.recovery-support {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

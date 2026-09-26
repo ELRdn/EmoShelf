@@ -12,7 +12,7 @@ release of the local-first Personal Emoji Shelf. See
 - Consistent text/image insertion outcomes, IME guards and pending-action protection.
 - Optional details, keyboard navigation and an unsaved practice editor.
 - Serialized, flushed saves; Quit and update installation wait for persistence.
-- Desktop regression coverage and a signed-draft qualification workflow.
+- Desktop regression coverage and an unsigned draft qualification workflow.
 - Permanent leftmost All tab with search/category reset and unchanged personal Boards.
 - Centered OS-native emoji and clear labels for missing or disabled style packs.
 
@@ -26,20 +26,29 @@ release of the local-first Personal Emoji Shelf. See
 - Export and restore `.emoshelf` backups with preview, merge, and replace protection.
 - Map Boards to an application without storing full executable paths or window titles.
 - Use keyboard navigation, visible focus, Reduced Motion, and high-contrast support.
-- Receive updates only after explicit consent and signature verification.
+- Update manually after exporting a backup; automatic updating remains disabled without trusted verification keys.
+
+## September 26 launch polish
+
+- Japanese/English download guidance, localized share URLs and social image, improved mobile text and touch targets.
+- Accessible contrast, localized saved-shelf labels, catalog retry and render recovery.
+- Settings Escape no longer also hides the shelf; manual updates link directly to official releases.
+- Failed E2E builds stop before testing stale binaries; installed production binaries use ordinary WebDriver without a test plugin.
+- Unsigned draft workflow reuses exact successful CI artifacts and verifies installation, E2E, uninstallation and checksums.
 
 ## Distribution
 
 The published release remains unsigned `v1.0.0-rc.1`. These reliability/UI changes
 are present only in the development source and local candidates, not that installer.
 
-The planned stable release will contain Authenticode-signed x64 and ARM64 NSIS/MSI
-installers, Tauri updater signatures, `latest.json` and checksums. Optional emoji
-styles will be separate signed GitHub Releases assets. Pack publication and the
+The planned stable release will contain explicitly labelled **unsigned** x64 and
+ARM64 NSIS/MSI installers and SHA-256 checksums. Updates are manual; no updater feed
+is published by this workflow. Optional emoji styles still require independently
+verified signed packs. Pack publication and the
 in-app preview/download/install flow remain outstanding; local-file pack import
 requires a build configured with the matching trusted verification key.
 
-Verify downloaded files against `SHA256SUMS.txt`. Formal artifacts are signed through SignPath Foundation; unsigned CI artifacts are not official releases.
+Verify downloaded files against `SHA256SUMS.txt`. EmoShelf does not currently receive SignPath signing. Only assets published in the official GitHub Release are distribution releases; local candidates and CI artifacts remain test outputs.
 
 ## Compatibility
 

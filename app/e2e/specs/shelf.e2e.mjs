@@ -1,3 +1,6 @@
+import { execFileSync } from "node:child_process";
+import axe from "axe-core";
+
 describe("EmoShelf desktop shell", () => {
   it("boots the real Tauri window and exposes the v1 shelf", async () => {
     const title = await $(".titlebar strong");
@@ -52,9 +55,58 @@ describe("EmoShelf desktop shell", () => {
     expect(overflows).toBe(false);
   });
 
+  it("passes accessibility checks in the rendered shelf and settings", async () => {
+    await browser.execute(axe.source);
+    const audit = () =>
+      browser.executeAsync((done) => {
+        window.axe
+          .run(document, {
+            runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
+          })
+          .then((result) =>
+            done(
+              result.violations.map((entry) => ({
+                id: entry.id,
+                nodes: entry.nodes.map((node) => ({
+                  target: node.target,
+                  summary: node.failureSummary,
+                })),
+              })),
+            ),
+          )
+          .catch((error) => done([{ error: String(error) }]));
+      });
+    expect(await audit()).toEqual([]);
+    await $(".settings-button").click();
+    expect(await audit()).toEqual([]);
+    // Use the real change handler for theme setup. Physical native dropdown
+    // interaction is checked separately with Computer Use.
+    await browser.execute(() => {
+      const select = document.querySelector(
+        'select:has(option[value="light"])',
+      );
+      select.value = "light";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(await audit()).toEqual([]);
+    await browser.execute(() => {
+      const select = document.querySelector('select:has(option[value="dark"])');
+      select.value = "dark";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await browser.keys("Escape");
+    expect(
+      await browser.execute(() =>
+        window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", {
+          label: "main",
+        }),
+      ),
+    ).toBe(true);
+  });
+
   it("opens all emoji from the leftmost tab and resets search and category filters", async () => {
     const all = await $(".board-tab");
-    await expect(all).toHaveText("▦All");
+    await expect(all).toHaveText(/▦\s*All/);
     await all.click();
     await expect(all).toHaveAttribute("aria-current", "page");
     await $(".virtual-grid-scroll button").waitForDisplayed();
@@ -167,6 +219,7 @@ describe("EmoShelf desktop shell", () => {
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });
     await browser.keys("Escape");
+    await expect($('.shelf-grid button[title="rocket"]')).toBeDisplayed();
     await $(".board-tab").click();
     await $(".virtual-grid-scroll button").waitForDisplayed();
     for (const width of [880, 480]) {
@@ -254,9 +307,19 @@ describe("EmoShelf desktop shell", () => {
         };
       });
     const reveal = async () => {
-      await browser.execute(() =>
-        window.__TAURI_INTERNALS__.invoke("reveal_shelf_for_test"),
-      );
+      if (process.env.EMOSHELF_E2E_BINARY) {
+        // Launching the installed app again exercises its real single-instance
+        // reveal callback, without shipping a test-only IPC command.
+        execFileSync(process.env.EMOSHELF_E2E_BINARY, [], {
+          timeout: 10_000,
+          windowsHide: true,
+          stdio: "pipe",
+        });
+      } else {
+        await browser.execute(() =>
+          window.__TAURI_INTERNALS__.invoke("reveal_shelf_for_test"),
+        );
+      }
       await browser.waitUntil(async () => {
         const state = await nativeState();
         // Embedded IPC is not a physical hotkey and Windows may refuse focus.

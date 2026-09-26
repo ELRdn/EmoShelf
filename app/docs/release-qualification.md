@@ -3,6 +3,14 @@
 Status: **NOT READY FOR PUBLIC LAUNCH**. Implementation, automated checks, desktop
 smoke tests and formal release acceptance are separate milestones.
 
+## September 26 launch polish and unsigned distribution
+
+The owner selected unsigned stable distribution with manual updates. Code signing
+is not a publication requirement. See [the launch review](launch-review-20260926.md)
+for the latest visual/interactive findings, fixes, installer artifacts and validation.
+Older references to mandatory SignPath approval below are historical. The remaining
+compatibility, installer and stability gates are still open; no public release is claimed.
+
 ## What changed
 
 - Alt+E always reveals the shelf, including when it is already foreground. Escape
@@ -294,7 +302,7 @@ seven desktop E2E scenarios do not cover actual insertion into a separate proces
 | Accessibility | Narrator, keyboard/IME, 100/125/150/200%, themes, contrast, reduced motion | Partial automated coverage; manual matrix pending |
 | Performance | >=30 samples, reveal-to-frame/focus p95 <=300ms, search-to-frame p95 <=100ms | Pending |
 | Sustained use | Five separate business days on one frozen candidate; no crashes/data loss/core regressions | Not started |
-| Distribution | Verified x64/ARM64 signed application and installers, update signatures, installed-app test | Blocked on external signing setup and validation |
+| Distribution | Verified x64/ARM64 unsigned application/installers, checksums, installed-app test and manual upgrade | Local isolated x64 NSIS smoke recorded below; native ARM64 and production installer qualification pending |
 
 Keep final evidence outside tracked source so it can name the exact frozen commit
 without a self-referential commit. Record installer hash, OS/build, app versions,
@@ -314,9 +322,10 @@ Start with `tools/release-evidence.example.json`, whose checks are deliberately 
 It also requires a clean source, build timestamp, OS build, app versions and reviewer;
 business-day records predating the candidate are rejected.
 
-The signing workflow now stops at an unpublished draft, so five-day qualification
-can use the exact signed artifact before promotion. Its changes are locally reviewed,
-not validated by an authenticated signing run. See `release.md` for promotion.
+The current unsigned workflow stops at an unpublished draft, so five-day qualification
+can use the exact artifact before promotion. It reuses installers from the exact
+successful CI commit. Its new workflow still needs a GitHub Actions run. Signing
+is not required under the September 26 distribution decision. See `release.md`.
 
 Native API references: [foreground activation](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow),
 [input batches](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput),

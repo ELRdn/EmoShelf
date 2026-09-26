@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EmoShelf social card source</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; width: 1200px; height: 630px; overflow: hidden; background: #f4f4f6; color: #18181b; font-family: "Segoe UI", sans-serif; }
+      main { height: 100%; padding: 52px 64px; position: relative; }
+      header { display: flex; align-items: center; gap: 14px; font-size: 34px; font-weight: 800; letter-spacing: -1.3px; }
+      header img { width: 48px; height: 48px; }
+      .dot { color: #6858d4; }
+      h1 { margin: 50px 0 24px; font-size: 74px; line-height: 1.15; letter-spacing: -3.5px; font-weight: 800; }
+      h1 span { color: #6858d4; border-bottom: 6px solid #ffc857; }
+      p { color: #62616c; font-size: 22px; margin: 32px 0; }
+      .shelf { position: absolute; right: 64px; top: 178px; width: 390px; background: #18181b; padding: 24px; border-radius: 22px; transform: rotate(-4deg); box-shadow: 0 18px 0 #d9d5e8; }
+      .shelf-label { color: #d2c9ff; font-size: 15px; display: flex; justify-content: space-between; margin-bottom: 22px; }
+      .keys { color: white; }
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      .tile { height: 82px; border-radius: 14px; background: #29282f; display: grid; place-items: center; border: 1px solid #45404f; }
+      .tile img { width: 50px; height: 50px; }
+      .tile:first-child { background: #37304f; border-color: #a38aff; }
+      footer { position: absolute; bottom: 50px; left: 64px; right: 64px; display: flex; justify-content: space-between; font-size: 17px; color: #62616c; }
+      .badge { color: #5846bd; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header><img id="brand" alt="" /><span>emoshelf<span class="dot">.</span></span></header>
+      <h1>Your favorites.<br /><span>Within reach.</span></h1>
+      <p>Your personal emoji shelf for Windows.</p>
+      <div class="shelf" aria-hidden="true">
+        <div class="shelf-label"><span>✦ MY SHELF</span><span class="keys">Alt + E</span></div>
+        <div class="grid">
+          <div class="tile"><img data-code="1f60e" alt="" /></div>
+          <div class="tile"><img data-code="2728" alt="" /></div>
+          <div class="tile"><img data-code="1f49c" alt="" /></div>
+          <div class="tile"><img data-code="1f525" alt="" /></div>
+          <div class="tile"><img data-code="1f680" alt="" /></div>
+          <div class="tile"><img data-code="1f44f" alt="" /></div>
+        </div>
+      </div>
+      <footer><span class="badge">WINDOWS 11 · FREE & OPEN SOURCE</span><span>elrdn.github.io/EmoShelf</span></footer>
+    </main>
+    <script type="module">
+      import icon from "../src-tauri/icons/128x128.png";
+
+      const assets = import.meta.glob("../node_modules/@twemoji/svg/{1f60e,2728,1f49c,1f525,1f680,1f44f}.svg", { eager: true, query: "?url", import: "default" });
+      document.querySelector("#brand").src = icon;
+      for (const img of document.querySelectorAll("[data-code]")) {
+        img.src = assets[`../node_modules/@twemoji/svg/${img.dataset.code}.svg`];
+      }
+    </script>
+  </body>
+</html>
