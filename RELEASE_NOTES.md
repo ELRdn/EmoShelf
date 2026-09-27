@@ -1,68 +1,53 @@
 # EmoShelf v1.0.0
 
-Unreleased development snapshot, September 22, 2026. v1.0.0 is undergoing qualification for the first stable Windows
-release of the local-first Personal Emoji Shelf. See
-[release qualification](app/docs/release-qualification.md) before publishing.
+The first stable release of EmoShelf, a local-first Personal Emoji Shelf for Windows 11.
+Press **Alt + E**, pick from your own Boards, and paste straight back into the app you were using.
 
-## Reliability refresh
+## Download
 
-- Foreground-aware Alt+E, verified target focus and explicit copy fallback.
-- Repeated Alt+E always brings the shelf forward; Escape/close dismiss it.
-- Pinned keeps the shelf open while returning focus and releasing its topmost position.
-- Consistent text/image insertion outcomes, IME guards and pending-action protection.
-- Optional details, keyboard navigation and an unsaved practice editor.
-- Serialized, flushed saves; Quit and update installation wait for persistence.
-- Desktop regression coverage and an unsigned draft qualification workflow.
-- Permanent leftmost All tab with search/category reset and unchanged personal Boards.
-- Centered OS-native emoji and clear labels for missing or disabled style packs.
+| Your PC | Installer |
+| --- | --- |
+| Windows 11 x64 (most PCs) | `EmoShelf_1.0.0_windows-x86_64_UNSIGNED-setup.exe` |
+| Windows 11 ARM64 | `EmoShelf_1.0.0_windows-aarch64_UNSIGNED-setup.exe` |
+
+MSI packages are also provided for managed installs. These installers are **not code-signed**, so Windows may show an
+"unknown publisher" warning. Download only from this page and verify the file against `SHA256SUMS.txt`
+before installing. See the [installation guide](https://github.com/ELRdn/EmoShelf#install)
+([日本語](https://github.com/ELRdn/EmoShelf/blob/main/README.jp.md#インストール)).
 
 ## Highlights
 
-- Reach personal Boards instantly with the global shortcut.
+- Reach personal Boards instantly with the global shortcut (Alt + E).
 - Search 1,949 emoji in English or Japanese.
 - Paste one item, compose a sequence, or keep EmoShelf pinned.
-- Use bundled Twemoji or OS-native emoji. Optional Fluent, Noto and OpenMoji delivery is planned as signed packs.
+- Use bundled Twemoji or OS-native emoji.
 - Import custom PNG, WebP, and safely normalized SVG assets.
 - Export and restore `.emoshelf` backups with preview, merge, and replace protection.
 - Map Boards to an application without storing full executable paths or window titles.
-- Use keyboard navigation, visible focus, Reduced Motion, and high-contrast support.
-- Update manually after exporting a backup; automatic updating remains disabled without trusted verification keys.
+- Keyboard navigation, visible focus, Reduced Motion, and high-contrast support.
+- Japanese and English UI. No account, no cloud sync, no analytics — your shelf stays on your PC.
 
-## September 26 launch polish
+## Changes since RC 1
 
-- Japanese/English download guidance, localized share URLs and social image, improved mobile text and touch targets.
-- Accessible contrast, localized saved-shelf labels, catalog retry and render recovery.
+- Alt+E always brings the shelf forward from hidden, background, or minimized states; Escape/close dismiss it.
+- Verified target focus before pasting, with an explicit copy fallback when direct input is not possible.
+- Pinned keeps the shelf open while returning focus to your app.
+- Permanent leftmost **All** tab with search/category reset that leaves your personal Boards unchanged.
+- Centered OS-native emoji and clear labels for unavailable style packs.
+- Serialized, flushed saves; quitting waits for persistence.
+- Render recovery screen, catalog retry, accessible contrast and localized labels.
 - Settings Escape no longer also hides the shelf; manual updates link directly to official releases.
-- Failed E2E builds stop before testing stale binaries; installed production binaries use ordinary WebDriver without a test plugin.
-- Unsigned draft workflow reuses exact successful CI artifacts and verifies installation, E2E, uninstallation and checksums.
 
-## Distribution
+## Updating
 
-The published release remains unsigned `v1.0.0-rc.1`. These reliability/UI changes
-are present only in the development source and local candidates, not that installer.
-
-The planned stable release will contain explicitly labelled **unsigned** x64 and
-ARM64 NSIS/MSI installers and SHA-256 checksums. Updates are manual; no updater feed
-is published by this workflow. Optional emoji styles still require independently
-verified signed packs. Pack publication and the
-in-app preview/download/install flow remain outstanding; local-file pack import
-requires a build configured with the matching trusted verification key.
-
-Verify downloaded files against `SHA256SUMS.txt`. EmoShelf does not currently receive SignPath signing. Only assets published in the official GitHub Release are distribution releases; local candidates and CI artifacts remain test outputs.
-
-## Compatibility
-
-- Windows 11 x64: local smoke coverage; full compatibility qualification pending.
-- Windows 11 ARM64: build target; current candidate has not been accepted on ARM64 hardware.
-- Existing schema-v1 data is migrated once to schema v2.
-- Existing schema-v2 data and unknown fields are preserved.
+Updates are manual. Export a backup from Settings, then install the new version over the existing one.
+Upgrading from RC 1 keeps your shelf data. Existing schema-v1 data is migrated once to schema v2.
 
 ## Known boundaries
 
-- Local checks: frontend 84, tooling 7, Rust 71, desktop E2E 10; see the qualification
-  record for which artifact each result applies to. Full external-app repetitions,
-  physical keyboard/DPI/accessibility, performance and five-day qualification remain open.
-- Changing emoji style changes EmoShelf previews; pasted Unicode uses the receiving app's font.
-- EmoShelf remains Windows-first.
-- Cloud sync, accounts, social features, AI features, nested folders, and Compact Quick View are outside v1.0.
+- Additional emoji styles (Fluent, Noto, OpenMoji) are planned as separately signed packs and are not included yet.
+- Changing the emoji style changes EmoShelf previews; pasted Unicode uses the receiving app's font.
+- EmoShelf is Windows 11 only. Cloud sync, accounts, and social features are out of scope.
 - Renderer artwork remains subject to its own license and attribution.
+
+Each installer was installed, tested and uninstalled in CI before this release was created.

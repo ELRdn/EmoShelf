@@ -99,11 +99,26 @@ jobs:
           path: candidate
       - run: pnpm --dir app install --frozen-lockfile
       - run: cargo install tauri-driver --locked
-      - name: Add matching EdgeDriver
+      - name: Add EdgeDriver matching the WebView2 runtime
         shell: pwsh
+        env:
+          RELEASE_ARCH: ${{ matrix.arch }}
         run: |
-          if (-not $env:EDGEWEBDRIVER) { throw 'EDGEWEBDRIVER is unavailable' }
-          $env:EDGEWEBDRIVER | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          # The runner's EDGEWEBDRIVER follows Edge, not the WebView2 runtime the app uses.
+          $client = 'Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $version = @("HKLM:\SOFTWARE\WOW6432Node\$client", "HKLM:\SOFTWARE\$client") |
+            ForEach-Object { (Get-ItemProperty -LiteralPath $_ -ErrorAction SilentlyContinue).pv } |
+            Where-Object { $_ -match '^\d+(\.\d+){3}$' } | Select-Object -First 1
+          if (-not $version) { throw 'WebView2 runtime version is unavailable' }
+          $package = if ($env:RELEASE_ARCH -eq 'aarch64') { 'arm64' } else { 'win64' }
+          $driverDir = Join-Path $env:RUNNER_TEMP 'msedgedriver'
+          $zip = Join-Path $env:RUNNER_TEMP 'msedgedriver.zip'
+          Invoke-WebRequest -Uri "https://msedgedriver.microsoft.com/$version/edgedriver_$package.zip" -OutFile $zip
+          Expand-Archive -LiteralPath $zip -DestinationPath $driverDir -Force
+          $driver = Join-Path $driverDir 'msedgedriver.exe'
+          if ((Get-Item -LiteralPath $driver).VersionInfo.ProductVersion -ne $version) { throw 'EdgeDriver does not match WebView2' }
+          Write-Output "WebView2 and EdgeDriver $version ($package)"
+          $driverDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Verify installer, run installed application tests and uninstall
         shell: pwsh
         env:
