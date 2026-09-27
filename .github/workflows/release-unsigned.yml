@@ -89,13 +89,13 @@ jobs:
             commit="$(node -p "require('./app/renderer-sources.json').sources['$name'].commit")"
             git clone --filter=blob:none --no-checkout "$repository" "renderer-sources/$name"
             git -C "renderer-sources/$name" sparse-checkout init --no-cone
-            printf '%s
-' "$@" | git -C "renderer-sources/$name" sparse-checkout set --stdin
+            printf '%s\n' "$@" | git -C "renderer-sources/$name" sparse-checkout set --stdin
             git -C "renderer-sources/$name" fetch --depth 1 origin "$commit"
             git -C "renderer-sources/$name" checkout --detach "$commit"
             test "$(git -C "renderer-sources/$name" rev-parse HEAD)" = "$commit"
           }
-          fetch_sparse_source fluent https://github.com/microsoft/fluentui-emoji             /LICENSE '/assets/*/metadata.json' '/assets/*/Color/*.svg'
+          fetch_sparse_source fluent https://github.com/microsoft/fluentui-emoji \
+            /LICENSE '/assets/*/metadata.json' '/assets/*/Color/*.svg'
           fetch_sparse_source noto https://github.com/googlefonts/noto-emoji /LICENSE '/svg/*.svg'
           fetch_sparse_source openmoji https://github.com/hfg-gmuend/openmoji /LICENSE.txt '/color/svg/*.svg'
       - name: Build and sign fail-closed emoji style packs
@@ -105,8 +105,11 @@ jobs:
           version="$(node -p "require('./app/renderer-sources.json').packVersion")"
           mkdir -p renderer-stage renderer-release
           for name in fluent noto openmoji; do
-            node app/tools/prepare-renderer-pack.mjs --renderer "$name" --source "renderer-sources/$name"               --output "renderer-stage/$name" --config app/renderer-sources.json               --catalog app/node_modules/emojibase-data/en/data.json
-            (cd "renderer-stage/$name" && zip -X -q -r "../../renderer-release/EmoShelf-$name-$version.emoshelf-renderer"               manifest.json signature.ed25519 LICENSE.txt emoji)
+            node app/tools/prepare-renderer-pack.mjs --renderer "$name" --source "renderer-sources/$name" \
+              --output "renderer-stage/$name" --config app/renderer-sources.json \
+              --catalog app/node_modules/emojibase-data/en/data.json
+            (cd "renderer-stage/$name" && zip -X -q -r "../../renderer-release/EmoShelf-$name-$version.emoshelf-renderer" \
+              manifest.json signature.ed25519 LICENSE.txt emoji)
           done
       - uses: actions/upload-artifact@v7
         with:
