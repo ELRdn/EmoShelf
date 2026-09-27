@@ -76,6 +76,8 @@ EmoShelfは導入時と読み込み時に、署名・各ファイルのハッシ
 
 ## 開発状況 — 2026年9月27日
 
+v1.2.0で、絵文字の大きさ（小・中・大、初期値は中）を選べるようにしました。棚の絵文字は長押しすると、ドラッグで並べ替えられます。
+
 v1.1.0で、署名付きのFluent・Noto・OpenMojiスタイルパックを追加しました。x64のインストーラーでは、3種類の導入・表示・削除をCIで確認しています。
 
 2026-09-27に正式版v1.0.0を公開しました。x64のインストーラーはCIでインストール・全デスクトップテスト・アンインストールを、ARM64は起動と描画を確認しています。
@@ -91,7 +93,7 @@ v1.1.0で、署名付きのFluent・Noto・OpenMojiスタイルパックを追�
 
 Windows 11のx64とARM64を対象に、**コード署名なしで配布**しています。インストーラーとチェックサムは[GitHub Releases](https://github.com/ELRdn/EmoShelf/releases)から入手してください。
 
-現在の版は、追加の絵文字スタイルに対応した[v1.1.0](https://github.com/ELRdn/EmoShelf/releases/tag/v1.1.0)です。Windowsで発行元不明やSmartScreenの警告が表示される場合があります。
+現在の版は、絵文字の大きさ設定と長押しでの並べ替えに対応した[v1.2.0](https://github.com/ELRdn/EmoShelf/releases/tag/v1.2.0)です。Windowsで発行元不明やSmartScreenの警告が表示される場合があります。
 
 各インストーラーは、公開前にCIでインストールとアンインストールを確認しています。SignPathによる署名提供は受けていません。[配布方針](./CODE_SIGNING_POLICY.md)も参照してください。ローカル候補やCIの生成物は公開済みリリースではありません。
 
@@ -108,12 +110,12 @@ SmartScreenの**「詳細情報」→「実行」**を検討できるのは、�
 
 Windowsの **設定 → システム → バージョン情報 → システムの種類** で、プロセッサが「x64ベース」か「ARMベース」かを確認してください。「64ビット」という表示だけでは区別できません。
 
-[公式v1.1.0の配布ページ](https://github.com/ELRdn/EmoShelf/releases/tag/v1.1.0)の**配布ファイル欄（Assets）**から、次のどちらか1つと`SHA256SUMS.txt`を同じフォルダーへダウンロードします。
+[公式v1.2.0の配布ページ](https://github.com/ELRdn/EmoShelf/releases/tag/v1.2.0)の**配布ファイル欄（Assets）**から、次のどちらか1つと`SHA256SUMS.txt`を同じフォルダーへダウンロードします。
 
 | PCの種類 | ダウンロードするインストーラー |
 | --- | --- |
-| x64（Intel / AMD） | `EmoShelf_1.1.0_windows-x86_64_UNSIGNED-setup.exe` |
-| ARM64（Snapdragonなど） | `EmoShelf_1.1.0_windows-aarch64_UNSIGNED-setup.exe` |
+| x64（Intel / AMD） | `EmoShelf_1.2.0_windows-x86_64_UNSIGNED-setup.exe` |
+| ARM64（Snapdragonなど） | `EmoShelf_1.2.0_windows-aarch64_UNSIGNED-setup.exe` |
 
 これはインストーラーであり、ポータブル版ではありません。通常はEXEだけでよく、MSIも重ねてインストールする必要はありません。`Source code (zip)` / `Source code (tar.gz)`はソースコードであり、そのまま実行するためのファイルではありません。
 
@@ -126,13 +128,13 @@ Windowsの **設定 → システム → バージョン情報 → システム�
 x64の場合：
 
 ```powershell
-Get-FileHash -LiteralPath '.\EmoShelf_1.1.0_windows-x86_64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
+Get-FileHash -LiteralPath '.\EmoShelf_1.2.0_windows-x86_64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
 ```
 
 ARM64の場合：
 
 ```powershell
-Get-FileHash -LiteralPath '.\EmoShelf_1.1.0_windows-aarch64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
+Get-FileHash -LiteralPath '.\EmoShelf_1.2.0_windows-aarch64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
 ```
 
 同じ配布ページから取得した`SHA256SUMS.txt`をメモ帳で開き、**同じファイル名の行**と出力の`Hash`を比較します。64桁すべての一致が必要です（英字の大文字・小文字は無視できます）。先頭や末尾だけで判断しないでください。ファイル名に`(1)`などが付いている場合は、コマンドの名前を実際の名前に合わせ、照合先には元の配布ファイル名の行を使います。

@@ -29,7 +29,7 @@ describe("landing page visitor journeys", () => {
       within(download).getByRole("link", { name: /GitHubからダウンロード/ }),
     ).toHaveAttribute(
       "href",
-      "https://github.com/ELRdn/EmoShelf/releases/tag/v1.1.0",
+      "https://github.com/ELRdn/EmoShelf/releases/tag/v1.2.0",
     );
     expect(
       within(download).getByRole("link", { name: /インストール手順/ }),

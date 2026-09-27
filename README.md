@@ -82,7 +82,10 @@ for the format and verification rules.
 
 ## Development checkpoint — September 27, 2026
 
-v1.1.0 adds signed Fluent, Noto, and OpenMoji style packs. Its x64 installers were checked in CI
+v1.2.0 adds an emoji size setting (Small, Medium, Large; Medium by default) and lets you
+press and hold an emoji on your shelf to drag it to a new spot.
+
+v1.1.0 added signed Fluent, Noto, and OpenMoji style packs. Its x64 installers were checked in CI
 to install, render, and remove all three packs.
 
 v1.0.0 was released on September 27, 2026. In CI, the x64 installers were installed,
@@ -105,7 +108,7 @@ are recorded separately from implementation completion.
 
 EmoShelf targets Windows 11 on x64 and ARM64 and is distributed **without code signing**. Download installers and checksums from [GitHub Releases](https://github.com/ELRdn/EmoShelf/releases).
 
-The current release is [v1.1.0](https://github.com/ELRdn/EmoShelf/releases/tag/v1.1.0), which adds optional emoji style packs. Windows may show an unknown-publisher or SmartScreen warning.
+The current release is [v1.2.0](https://github.com/ELRdn/EmoShelf/releases/tag/v1.2.0), which adds an emoji size setting and press-and-hold reordering. Windows may show an unknown-publisher or SmartScreen warning.
 
 Each installer is installed and uninstalled in CI before a release is published. SignPath is not providing signing for the project. See the [distribution policy](./CODE_SIGNING_POLICY.md). Local candidates and CI artifacts are not published releases.
 
@@ -119,12 +122,12 @@ Before installing, use only the linked GitHub Release, choose the matching archi
 
 In Windows, open **Settings → System → About → System type** and check whether your processor is x64-based or ARM-based. The label "64-bit" alone does not distinguish them.
 
-Under **Assets** on the [official v1.1.0 release](https://github.com/ELRdn/EmoShelf/releases/tag/v1.1.0), download one of the following installers and `SHA256SUMS.txt` into the same folder.
+Under **Assets** on the [official v1.2.0 release](https://github.com/ELRdn/EmoShelf/releases/tag/v1.2.0), download one of the following installers and `SHA256SUMS.txt` into the same folder.
 
 | PC type | Installer to download |
 | --- | --- |
-| x64 (Intel / AMD) | `EmoShelf_1.1.0_windows-x86_64_UNSIGNED-setup.exe` |
-| ARM64 (such as Snapdragon) | `EmoShelf_1.1.0_windows-aarch64_UNSIGNED-setup.exe` |
+| x64 (Intel / AMD) | `EmoShelf_1.2.0_windows-x86_64_UNSIGNED-setup.exe` |
+| ARM64 (such as Snapdragon) | `EmoShelf_1.2.0_windows-aarch64_UNSIGNED-setup.exe` |
 
 These are installers, not portable builds. The EXE is normally sufficient; you do not also need to install the MSI. `Source code (zip)` and `Source code (tar.gz)` are not ready-to-run applications.
 
@@ -137,13 +140,13 @@ Open the download folder in File Explorer, type `powershell` in the address bar,
 x64:
 
 ```powershell
-Get-FileHash -LiteralPath '.\EmoShelf_1.1.0_windows-x86_64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
+Get-FileHash -LiteralPath '.\EmoShelf_1.2.0_windows-x86_64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
 ```
 
 ARM64:
 
 ```powershell
-Get-FileHash -LiteralPath '.\EmoShelf_1.1.0_windows-aarch64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
+Get-FileHash -LiteralPath '.\EmoShelf_1.2.0_windows-aarch64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
 ```
 
 Open `SHA256SUMS.txt` from the same release in Notepad. Compare the output's `Hash` with **the line for the same filename**. All 64 characters must match; letter case does not matter. Do not check only the beginning or end. If the downloaded filename has a suffix such as `(1)`, adjust the command to match the actual filename, but compare against the checksum entry for the original release filename.

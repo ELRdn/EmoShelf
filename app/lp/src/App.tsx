@@ -51,7 +51,7 @@ function Arrow({ diagonal = false }: { diagonal?: boolean }) {
 const copy = {
   ja: {
     download: "ダウンロード",
-    releaseNote: "v1.1.0 公開中 · 無料でダウンロード",
+    releaseNote: "v1.2.0 公開中 · 無料でダウンロード",
     downloadTitle: "はじめる前に、知っておきたいこと。",
     downloadBody:
       "Windows 11向けの無料アプリです。コード署名なしで提供し、更新は手動です。",
@@ -153,7 +153,7 @@ const copy = {
     ],
     final: "あなたの棚、今日から。",
     finalBody: "毎日の「これこれ」を、もっと近くに。最新情報はXとGitHubで。",
-    preparing: "v1.1.0 公開中",
+    preparing: "v1.2.0 公開中",
     pending: "リンクは公開準備中です。",
     github: "GitHubで開発を見る",
     footer: "あなたらしさを、すぐそばに。",
@@ -161,7 +161,7 @@ const copy = {
   },
   en: {
     download: "Get EmoShelf",
-    releaseNote: "v1.1.0 is here · Free download",
+    releaseNote: "v1.2.0 is here · Free download",
     downloadTitle: "A few things before you start.",
     downloadBody:
       "A free app for Windows 11, distributed without code signing. Updates are manual.",
@@ -263,7 +263,7 @@ const copy = {
     final: "Your shelf is ready.",
     finalBody:
       "Your everyday favorites, a little closer. Follow along on X and GitHub.",
-    preparing: "v1.1.0 available",
+    preparing: "v1.2.0 available",
     pending: "This link is being prepared.",
     github: "Explore on GitHub",
     footer: "A little closer to you.",
