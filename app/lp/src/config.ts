@@ -10,9 +10,8 @@ export const socialLinks: {
 
 export const siteUrl = "https://elrdn.github.io/EmoShelf/";
 export const releaseLinks = {
-  // This is the verified published candidate, not the UI shown in the preview.
-  version: "1.0.0-rc.1",
-  release: "https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0-rc.1",
+  version: "1.0.0",
+  release: "https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0",
   guideJa:
     "https://github.com/ELRdn/EmoShelf/blob/main/README.jp.md#インストール",
   guideEn: "https://github.com/ELRdn/EmoShelf#install",

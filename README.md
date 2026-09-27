@@ -12,10 +12,9 @@ EmoShelf is a fast, local-first Windows app for keeping the emojis, sequences, s
 
 Press <kbd>Alt</kbd> + <kbd>E</kbd>, choose from your Board or **All**, and paste. No account, cloud sync, telemetry, or remote profile is required.
 
-![EmoShelf in English with the All catalog and native emoji — development preview](./images/screenshots/emoshelf-en.png)
+![EmoShelf in English with the All catalog and native emoji](./images/screenshots/emoshelf-en.png)
 
-Actual local development build, September 22, 2026. These changes are not included
-in the published RC 1 installer; formal release qualification is still in progress.
+The actual app, as shipped in v1.0.0.
 
 ## What it does
 
@@ -31,10 +30,9 @@ in the published RC 1 installer; formal release qualification is still in progre
 
 ## Fast path
 
-The unreleased reliability refresh is being qualified before broader distribution.
 See the [release qualification record](app/docs/release-qualification.md) for verified
-behavior and pending compatibility checks. The screenshot shows the current
-development UI; it does not demonstrate external application compatibility.
+behavior and remaining compatibility checks. Automatic insertion depends on the
+destination app; copy-and-paste is always available as a fallback.
 
 ```text
 Alt + E → Board → emoji → target application
@@ -83,49 +81,52 @@ Style changes affect EmoShelf's preview. Unicode pasted into another application
 uses that application's emoji font. See the [pack specification and delivery
 checklist](app/docs/renderer-packs.md) for the remaining work.
 
-## Development checkpoint — September 26, 2026
+## Development checkpoint — September 27, 2026
 
-The launch polish adds bilingual download/install guidance, share metadata and a
+v1.0.0 was released on September 27, 2026. In CI, the x64 installers were installed,
+passed the full desktop test suite and were uninstalled; the ARM64 installers were
+checked to launch and render the shelf.
+
+The September 26 launch polish added bilingual download/install guidance, share metadata and a
 mobile layout review, render/catalog recovery, clearer manual updates, and localized
 shelf accessibility labels. Settings now consume Escape without also hiding the shelf.
 The installed-app test runner works with production binaries without a test plugin.
 
-Current results and exact artifact hashes are in the [launch report](app/docs/launch-review-20260926.md).
-The earlier 71 Rust-test result remains historical; no Rust source changed in this pass.
+Pre-release results are in the [launch report](app/docs/launch-review-20260926.md).
 
-The distribution plan is unsigned. Installer qualification, ARM64 acceptance,
+EmoShelf is distributed unsigned. ARM64 hardware acceptance,
 the full app/DPI/accessibility matrix, performance qualification and five business
 days of stable use remain required. [Evidence and limitations](app/docs/release-qualification.md)
 are recorded separately from implementation completion.
 
 ## Install
 
-EmoShelf targets Windows 11 on x64 and ARM64 and will be distributed **without code signing**, including stable releases. Download installers and checksums from [GitHub Releases](https://github.com/ELRdn/EmoShelf/releases).
+EmoShelf targets Windows 11 on x64 and ARM64 and is distributed **without code signing**. Download installers and checksums from [GitHub Releases](https://github.com/ELRdn/EmoShelf/releases).
 
-The current download is [v1.0.0 RC 1](https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0-rc.1), an **unsigned test release**. It predates the development screenshots and improvements above. Windows may show an unknown-publisher or SmartScreen warning.
+The current release is [v1.0.0](https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0), the first stable release. Windows may show an unknown-publisher or SmartScreen warning.
 
-Stable artifacts require source, checksum, installer and compatibility qualification. SignPath is not providing signing for the project. See the [distribution policy](./CODE_SIGNING_POLICY.md). Local candidates and CI artifacts are not published releases.
+Each installer is installed and uninstalled in CI before a release is published. SignPath is not providing signing for the project. See the [distribution policy](./CODE_SIGNING_POLICY.md). Local candidates and CI artifacts are not published releases.
 
-### Installing the unsigned release candidate
+### Installing the unsigned release
 
-**Current RC and planned stable releases are unsigned.** Windows cannot verify the publisher through a certificate. Follow the source and checksum checks below. On a work- or school-managed PC, consult your administrator if unsigned applications are restricted.
+**EmoShelf releases are unsigned.** Windows cannot verify the publisher through a certificate. Follow the source and checksum checks below. On a work- or school-managed PC, consult your administrator if unsigned applications are restricted.
 
-Before installing, use only the linked GitHub Release, choose the matching architecture, and compare the complete SHA-256. A matching hash is not proof of publisher identity or safety. Scan the file, keep Windows protections enabled, and stop on a threat detection or policy block. Only consider the per-file SmartScreen **More info → Run anyway** option if the warning is solely about an unrecognized app and you trust the source. This RC has no production updater configured; back up and update manually.
+Before installing, use only the linked GitHub Release, choose the matching architecture, and compare the complete SHA-256. A matching hash is not proof of publisher identity or safety. Scan the file, keep Windows protections enabled, and stop on a threat detection or policy block. Only consider the per-file SmartScreen **More info → Run anyway** option if the warning is solely about an unrecognized app and you trust the source. There is no automatic updater; back up and update manually.
 
 #### 1. Download the EXE for your PC from the official release
 
 In Windows, open **Settings → System → About → System type** and check whether your processor is x64-based or ARM-based. The label "64-bit" alone does not distinguish them.
 
-Under **Assets** on the [official v1.0.0-rc.1 release](https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0-rc.1), download one of the following installers and `SHA256SUMS.txt` into the same folder.
+Under **Assets** on the [official v1.0.0 release](https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0), download one of the following installers and `SHA256SUMS.txt` into the same folder.
 
 | PC type | Installer to download |
 | --- | --- |
-| x64 (Intel / AMD) | `EmoShelf_1.0.0-rc.1_windows-x86_64_UNSIGNED-setup.exe` |
-| ARM64 (such as Snapdragon) | `EmoShelf_1.0.0-rc.1_windows-aarch64_UNSIGNED-setup.exe` |
+| x64 (Intel / AMD) | `EmoShelf_1.0.0_windows-x86_64_UNSIGNED-setup.exe` |
+| ARM64 (such as Snapdragon) | `EmoShelf_1.0.0_windows-aarch64_UNSIGNED-setup.exe` |
 
 These are installers, not portable builds. The EXE is normally sufficient; you do not also need to install the MSI. `Source code (zip)` and `Source code (tar.gz)` are not ready-to-run applications.
 
-Confirm that the source is **`github.com/ELRdn/EmoShelf`**. Do not download through search ads, unofficial mirrors, direct messages, or email attachments. Stop if your browser detects a threat. Even if the warning only says the file is not commonly downloaded, do not assume it is safe: verify the source and remember that this is a release candidate.
+Confirm that the source is **`github.com/ELRdn/EmoShelf`**. Do not download through search ads, unofficial mirrors, direct messages, or email attachments. Stop if your browser detects a threat. Even if the warning only says the file is not commonly downloaded, do not assume it is safe: verify the source and checksum first.
 
 #### 2. Compare the SHA-256 before running the installer
 
@@ -134,13 +135,13 @@ Open the download folder in File Explorer, type `powershell` in the address bar,
 x64:
 
 ```powershell
-Get-FileHash -LiteralPath '.\EmoShelf_1.0.0-rc.1_windows-x86_64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
+Get-FileHash -LiteralPath '.\EmoShelf_1.0.0_windows-x86_64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
 ```
 
 ARM64:
 
 ```powershell
-Get-FileHash -LiteralPath '.\EmoShelf_1.0.0-rc.1_windows-aarch64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
+Get-FileHash -LiteralPath '.\EmoShelf_1.0.0_windows-aarch64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
 ```
 
 Open `SHA256SUMS.txt` from the same release in Notepad. Compare the output's `Hash` with **the line for the same filename**. All 64 characters must match; letter case does not matter. Do not check only the beginning or end. If the downloaded filename has a suffix such as `(1)`, adjust the command to match the actual filename, but compare against the checksum entry for the original release filename.
@@ -152,8 +153,8 @@ A matching hash confirms that the bytes match the published checksum. Because th
 #### 3. Scan the file, review warnings, and install
 
 1. Update Windows and your antivirus software. Right-click the EXE and select **Show more options → Scan with Microsoft Defender**. If you use another antivirus product, scan with that instead. A clean scan does not guarantee safety. [Microsoft's scanning instructions](https://support.microsoft.com/en-us/windows/scan-an-item-with-windows-security-d1c8c01d-12ed-e768-cbb8-830ea8ccf8e6)
-2. Double-click the EXE only if no threat was detected, you verified the source and hash, and you accept the risks of using an unsigned RC.
-3. If SmartScreen's **"Windows protected your PC"** message is solely a warning about an unrecognized app, select **More info** to check the app name. This RC may show **Unknown publisher**, which does not mean the publisher is verified. Choose **Run anyway** only if you trust the verified file and decide to proceed. If unsure, select **Don't run**. [Microsoft's SmartScreen guidance](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/publish-first-app#step-6-handle-smartscreen-for-new-apps)
+2. Double-click the EXE only if no threat was detected, you verified the source and hash, and you accept the risks of using an unsigned app.
+3. If SmartScreen's **"Windows protected your PC"** message is solely a warning about an unrecognized app, select **More info** to check the app name. EmoShelf may show **Unknown publisher**, which does not mean the publisher is verified. Choose **Run anyway** only if you trust the verified file and decide to proceed. If unsure, select **Don't run**. [Microsoft's SmartScreen guidance](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/publish-first-app#step-6-handle-smartscreen-for-new-apps)
 4. Follow the installer. If User Account Control asks to allow changes to your device, confirm that it is the installer you launched. Cancel if it names an unfamiliar program or makes an unexpected request. Do not use **Run as administrator** to bypass warnings.
 
 **Do not run the installer in the following cases. Stop and consult your administrator if needed.**
@@ -175,11 +176,11 @@ The window's close button hides EmoShelf in the tray; it does not quit the app. 
 
 #### 5. Back up, update, and uninstall
 
-This RC does not have a production updater public key, so in-app updates are unavailable. Before updating, save a **`.emoshelf` backup** using Export in settings, quit the app, and check the official Releases page for a newer version. Verify the new files using that release's checksums and signing policy; do not reuse the RC's checksums.
+EmoShelf has no automatic updater, so updates are manual. Before updating, save a **`.emoshelf` backup** using Export in settings, quit the app, and check the official Releases page for a newer version. Verify the new files using that release's checksums and signing policy; do not reuse an older release's checksums. Installing a newer version over the existing one keeps your shelf data.
 
 To uninstall, back up your data, select **Quit** in the tray menu, then open **Settings → Apps → Installed apps → EmoShelf → Uninstall** in Windows. Do not assume that saved data will survive uninstallation; keep your backup outside the app's storage.
 
-Report problems through [GitHub Issues](https://github.com/ELRdn/EmoShelf/issues). Include the RC tag, filename, Windows version, x64/ARM64 architecture, and warning text. Hide personal information in screenshots, and do not publish clipboard contents or personal backup files.
+Report problems through [GitHub Issues](https://github.com/ELRdn/EmoShelf/issues). Include the release version, filename, Windows version, x64/ARM64 architecture, and warning text. Hide personal information in screenshots, and do not publish clipboard contents or personal backup files.
 
 ## Privacy and security
 

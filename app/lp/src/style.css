@@ -627,6 +627,8 @@ h2 {
   line-height: 1.5;
   font-weight: 850;
   margin: 19.2px 0;
+  word-break: auto-phrase;
+  text-wrap: balance;
 }
 p {
   line-height: 1.9;

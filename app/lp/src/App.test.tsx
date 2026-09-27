@@ -19,17 +19,17 @@ describe("landing page visitor journeys", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps the actual prerelease status and install guide next to the release link", () => {
+  it("keeps the unsigned status and install guide next to the release link", () => {
     render(<App />);
     const download = screen.getByRole("region", {
       name: "はじめる前に、知っておきたいこと。",
     });
-    expect(within(download).getByText("テスト用 RC 1 · 未署名")).toBeVisible();
+    expect(within(download).getByText("正式版 · 未署名")).toBeVisible();
     expect(
-      within(download).getByRole("link", { name: /RC 1の配布ページ/ }),
+      within(download).getByRole("link", { name: /GitHubからダウンロード/ }),
     ).toHaveAttribute(
       "href",
-      "https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0-rc.1",
+      "https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0",
     );
     expect(
       within(download).getByRole("link", { name: /インストール手順/ }),

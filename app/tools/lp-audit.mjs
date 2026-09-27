@@ -10,8 +10,8 @@ for (const locale of ["ja", "en"]) {
   const html = readFileSync(path.join(root, file), "utf8");
   assert(html.includes(`<html lang="${locale}">`), `${file}: wrong language`);
   assert(
-    html.includes('name="robots" content="noindex, nofollow"'),
-    `${file}: keep the development preview unindexed until the matching release is published`,
+    !html.includes('name="robots"'),
+    `${file}: the launched page must stay indexable`,
   );
   assert(
     html.includes(
@@ -56,5 +56,5 @@ assert(png.subarray(1, 4).toString() === "PNG", "Social card must be PNG");
 assert.equal(png.readUInt32BE(16), 1200, "Social card width");
 assert.equal(png.readUInt32BE(20), 630, "Social card height");
 console.log(
-  "LP audit passed: both languages, canonical/alternates, preview gate, social metadata, assets, and 1200x630 share image.",
+  "LP audit passed: both languages, canonical/alternates, indexable, social metadata, assets, and 1200x630 share image.",
 );

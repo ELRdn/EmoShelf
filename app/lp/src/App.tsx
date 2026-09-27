@@ -50,15 +50,15 @@ function Arrow({ diagonal = false }: { diagonal?: boolean }) {
 }
 const copy = {
   ja: {
-    download: "ダウンロード案内",
-    releaseNote: "正式版は準備中 · テスト用RCを公開しています",
+    download: "ダウンロード",
+    releaseNote: "v1.0.0 公開中 · 無料でダウンロード",
     downloadTitle: "はじめる前に、知っておきたいこと。",
     downloadBody:
-      "Windows 11向けの無料アプリです。コード署名なしで提供します。現在入手できるのはテスト用のRC 1です。",
-    candidate: "テスト用 RC 1 · 未署名",
+      "Windows 11向けの無料アプリです。コード署名なしで提供し、更新は手動です。",
+    candidate: "正式版 · 未署名",
     candidateBody:
-      "このページの開発版とは機能・見た目が異なります。Windowsに発行元を確認できない警告が出る場合があります。公式配布ページとSHA-256を確認し、手順を読んでからインストールしてください。",
-    releaseAction: "RC 1の配布ページ",
+      "Windowsに発行元を確認できない警告が出る場合があります。GitHubの公式配布ページから入手し、SHA-256を確認してからインストールしてください。",
+    releaseAction: "GitHubからダウンロード",
     guideAction: "インストール手順を読む",
     requirements: "対応環境",
     requirementsBody:
@@ -116,7 +116,7 @@ const copy = {
       "自分の画像も、棚の仲間に",
       "データは自分のPCに保存",
     ],
-    actual: "実アプリの画面 / 品質改善中の開発版",
+    actual: "実アプリの画面 · v1.0.0",
     privacy: "あなたの棚は、あなたのPCに。",
     privacyBody:
       "アカウント登録も、クラウド同期も不要。アプリにアクセス解析は含まれません。",
@@ -124,7 +124,7 @@ const copy = {
     questions: [
       [
         "どのWindowsで使えますか？",
-        "Windows 11のx64・ARM64向けです。RC 1は両方のインストーラーを用意しています。お使いのPCに合ったものを選んでください。このページの体験デモはスマートフォンでも試せます。",
+        "Windows 11のx64・ARM64向けです。両方のインストーラーを用意しています。お使いのPCに合ったものを選んでください。このページの体験デモはスマートフォンでも試せます。",
       ],
       [
         "無料で使えますか？",
@@ -139,8 +139,8 @@ const copy = {
         "アプリの棚はローカルに保存されます。このページのデモはサンプル表示のみで、入力や選択をサーバーに送信せず、クリップボードにもアクセスしません。",
       ],
       [
-        "いつダウンロードできますか？",
-        "テスト用の未署名RC 1をGitHubで公開しています。今後の正式版も未署名で提供する方針です。ページ内のダウンロード案内で、違いとインストール手順をご確認ください。",
+        "Windowsに「発行元が不明」と警告されるのはなぜですか？",
+        "EmoShelfはコード署名なしで提供しているためです。GitHubの公式配布ページから入手し、SHA-256が一致することを確認してください。手順はインストール案内にまとめています。",
       ],
       [
         "絵文字が入力欄に入らないときは？",
@@ -148,12 +148,12 @@ const copy = {
       ],
       [
         "絵文字の見た目も変えられますか？",
-        "開発版にはTwemojiとWindows標準の表示があります。貼り付け先では、そのアプリの絵文字フォントで表示されます。Fluent・Noto・OpenMojiの追加パックは配布準備中です。",
+        "TwemojiとWindows標準の表示を切り替えられます。貼り付け先では、そのアプリの絵文字フォントで表示されます。Fluent・Noto・OpenMojiの追加パックは配布準備中です。",
       ],
     ],
-    final: "あなたの棚、もうすぐ。",
-    finalBody: "毎日の「これこれ」を、もっと近くに。公開情報はXとGitHubで。",
-    preparing: "公開準備中",
+    final: "あなたの棚、今日から。",
+    finalBody: "毎日の「これこれ」を、もっと近くに。最新情報はXとGitHubで。",
+    preparing: "v1.0.0 公開中",
     pending: "リンクは公開準備中です。",
     github: "GitHubで開発を見る",
     footer: "あなたらしさを、すぐそばに。",
@@ -161,14 +161,14 @@ const copy = {
   },
   en: {
     download: "Get EmoShelf",
-    releaseNote: "Stable release in preparation · Unsigned test RC available",
+    releaseNote: "v1.0.0 is here · Free download",
     downloadTitle: "A few things before you start.",
     downloadBody:
-      "A free app for Windows 11, distributed without code signing. The available download is RC 1, a test build.",
-    candidate: "Test RC 1 · Unsigned",
+      "A free app for Windows 11, distributed without code signing. Updates are manual.",
+    candidate: "Stable · Unsigned",
     candidateBody:
-      "Its features and appearance differ from the development preview on this page. Windows may show an unknown-publisher warning. Verify the official source and SHA-256, then read the install guide before running it.",
-    releaseAction: "View the RC 1 release",
+      "Windows may show an unknown-publisher warning. Download from the official GitHub release and verify the SHA-256 before installing.",
+    releaseAction: "Download from GitHub",
     guideAction: "Read the install guide",
     requirements: "What you need",
     requirementsBody:
@@ -226,14 +226,14 @@ const copy = {
       "Bring your own images",
       "Keep your data on your PC",
     ],
-    actual: "Actual app / reliability development preview",
+    actual: "The actual app · v1.0.0",
     privacy: "Your shelf. Your computer.",
     privacyBody: "No account. No cloud sync required. No analytics in the app.",
     faqTitle: "A few good questions.",
     questions: [
       [
         "Which Windows versions are supported?",
-        "EmoShelf targets Windows 11 on x64 and ARM64. RC 1 has installers for both. Choose the one that matches your PC. You can try this browser demo on your phone.",
+        "EmoShelf targets Windows 11 on x64 and ARM64, with installers for both. Choose the one that matches your PC. You can try this browser demo on your phone.",
       ],
       [
         "Is it free?",
@@ -248,8 +248,8 @@ const copy = {
         "The app stores your shelf locally. This page only displays a sample: it does not send your selections to a server or access your clipboard.",
       ],
       [
-        "When can I download it?",
-        "An unsigned test RC 1 is available on GitHub. Future stable releases are also planned as unsigned downloads. See Get EmoShelf on this page for the differences and installation instructions.",
+        "Why does Windows warn about an unknown publisher?",
+        "EmoShelf is distributed without code signing. Download it from the official GitHub release and check that the SHA-256 matches. The install guide walks you through it.",
       ],
       [
         "What if the emoji does not appear in my text field?",
@@ -257,13 +257,13 @@ const copy = {
       ],
       [
         "Can I change the emoji style?",
-        "The development build includes Twemoji and Windows native emoji. Pasted text uses the destination app's emoji font. Optional Fluent, Noto, and OpenMoji packs are not published yet.",
+        "You can switch between Twemoji and Windows native emoji. Pasted text uses the destination app's emoji font. Optional Fluent, Noto, and OpenMoji packs are not published yet.",
       ],
     ],
-    final: "Your shelf is almost here.",
+    final: "Your shelf is ready.",
     finalBody:
       "Your everyday favorites, a little closer. Follow along on X and GitHub.",
-    preparing: "Coming soon",
+    preparing: "v1.0.0 available",
     pending: "This link is being prepared.",
     github: "Explore on GitHub",
     footer: "A little closer to you.",
@@ -640,8 +640,8 @@ export default function App() {
                 height={1322}
                 alt={
                   lang === "ja"
-                    ? "EmoShelf開発版の実画面。左端のAllタブ、検索、Windows標準の絵文字一覧と詳細の開閉ボタン。"
-                    : "EmoShelf development build with the leftmost All tab, search, native Windows emoji and an optional details control."
+                    ? "EmoShelfの実画面。左端のAllタブ、検索、Windows標準の絵文字一覧と詳細の開閉ボタン。"
+                    : "EmoShelf with the leftmost All tab, search, native Windows emoji and an optional details control."
                 }
                 loading="lazy"
               />
@@ -678,6 +678,15 @@ export default function App() {
               <p>{c.candidateBody}</p>
               <a
                 className="button primary"
+                href={releaseLinks.release}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {c.releaseAction}
+                <Arrow diagonal />
+              </a>
+              <a
+                className="text-link"
                 href={
                   lang === "ja" ? releaseLinks.guideJa : releaseLinks.guideEn
                 }
@@ -685,15 +694,6 @@ export default function App() {
                 rel="noopener noreferrer"
               >
                 {c.guideAction}
-                <Arrow diagonal />
-              </a>
-              <a
-                className="text-link"
-                href={releaseLinks.release}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {c.releaseAction}
                 <Arrow diagonal />
               </a>
             </article>
