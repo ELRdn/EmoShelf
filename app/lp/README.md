@@ -30,7 +30,7 @@ v1.0.0の公開に合わせてnoindexを解除した。`lp:audit` はnoindexが�
 `app/lp/dist` だけを公開する。PRではビルド確認のみ行う。
 手動で再公開する場合は Actions → LP Pages → Run workflow からmainを選ぶ。
 
-未署名の正式版v1.0.0の配布ページとインストール手順へ案内する。
+未署名の最新版v1.1.0の配布ページとインストール手順へ案内する。
 新しい版を出すときは、Releaseの公開後に `src/config.ts` のバージョンとリンクを切り替える。
 
 Twemojiはインストール済みパッケージから必要な17素材だけをビルドに含める。
@@ -39,4 +39,4 @@ Twemojiはインストール済みパッケージから必要な17素材だけ�
 表示言語に合わせて`images/screenshots/emoshelf-en.png`と`emoshelf-ja.png`を切り替える。
 Allタブ、Native配置修正、英語UIの横はみ出し修正を含む。
 撮影条件は[`images/screenshots/README.md`](../../images/screenshots/README.md)を参照。
-v1.0.0と同じUI。見た目が変わる版を出すときは撮り直す。
+v1.0.0で撮影。v1.1.0とは版表示だけが異なる。見た目が変わる版を出すときは撮り直す。

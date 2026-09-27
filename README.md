@@ -62,26 +62,28 @@ catalog; clicking it again clears the search and category filter. Personal Board
 and their `Ctrl+1..9` assignments are unchanged. Physical keyboard coverage and
 external-app compatibility are still being qualified; see the linked record.
 
-## Emoji styles: available now and next
+## Emoji styles
 
-| Style | Current availability |
+| Style | How to get it |
 | --- | --- |
 | Twemoji | Included with the app; usable offline |
 | Native / System | Uses the OS emoji font; no additional download |
-| Fluent Emoji, Noto Emoji, OpenMoji | Pack support implemented; downloadable packs are not yet published |
+| Fluent Emoji, Noto Emoji, OpenMoji | Signed style packs on [GitHub Releases](https://github.com/ELRdn/EmoShelf/releases/latest) (v1.1.0 or later) |
 
-The agreed distribution model keeps the defaults immediately usable and distributes
-the three optional styles as signed assets on GitHub Releases. A future in-app
-style gallery will show previews and offer download/install/update controls; an
-installed pack will remain usable offline. **That download flow is not implemented
-yet.** The current UI can import a local pack file when the app was built with its
-trusted verification key, and identifies missing or disabled packs explicitly.
+To add a style, download its `.emoshelf-renderer` file from the release, open
+**Settings → Additional emoji styles → Install pack**, and choose the file. Then pick it
+under **Emoji appearance**. Installed packs work offline. EmoShelf verifies each pack's
+signature, file hashes, and SVG content before installing and again when loading it.
+Emoji a style does not cover fall back to Twemoji.
 
 Style changes affect EmoShelf's preview. Unicode pasted into another application
-uses that application's emoji font. See the [pack specification and delivery
-checklist](app/docs/renderer-packs.md) for the remaining work.
+uses that application's emoji font. See the [pack specification](app/docs/renderer-packs.md)
+for the format and verification rules.
 
 ## Development checkpoint — September 27, 2026
+
+v1.1.0 adds signed Fluent, Noto, and OpenMoji style packs. Its x64 installers were checked in CI
+to install, render, and remove all three packs.
 
 v1.0.0 was released on September 27, 2026. In CI, the x64 installers were installed,
 passed the full desktop test suite and were uninstalled; the ARM64 installers were
@@ -103,7 +105,7 @@ are recorded separately from implementation completion.
 
 EmoShelf targets Windows 11 on x64 and ARM64 and is distributed **without code signing**. Download installers and checksums from [GitHub Releases](https://github.com/ELRdn/EmoShelf/releases).
 
-The current release is [v1.0.0](https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0), the first stable release. Windows may show an unknown-publisher or SmartScreen warning.
+The current release is [v1.1.0](https://github.com/ELRdn/EmoShelf/releases/tag/v1.1.0), which adds optional emoji style packs. Windows may show an unknown-publisher or SmartScreen warning.
 
 Each installer is installed and uninstalled in CI before a release is published. SignPath is not providing signing for the project. See the [distribution policy](./CODE_SIGNING_POLICY.md). Local candidates and CI artifacts are not published releases.
 
@@ -117,12 +119,12 @@ Before installing, use only the linked GitHub Release, choose the matching archi
 
 In Windows, open **Settings → System → About → System type** and check whether your processor is x64-based or ARM-based. The label "64-bit" alone does not distinguish them.
 
-Under **Assets** on the [official v1.0.0 release](https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0), download one of the following installers and `SHA256SUMS.txt` into the same folder.
+Under **Assets** on the [official v1.1.0 release](https://github.com/ELRdn/EmoShelf/releases/tag/v1.1.0), download one of the following installers and `SHA256SUMS.txt` into the same folder.
 
 | PC type | Installer to download |
 | --- | --- |
-| x64 (Intel / AMD) | `EmoShelf_1.0.0_windows-x86_64_UNSIGNED-setup.exe` |
-| ARM64 (such as Snapdragon) | `EmoShelf_1.0.0_windows-aarch64_UNSIGNED-setup.exe` |
+| x64 (Intel / AMD) | `EmoShelf_1.1.0_windows-x86_64_UNSIGNED-setup.exe` |
+| ARM64 (such as Snapdragon) | `EmoShelf_1.1.0_windows-aarch64_UNSIGNED-setup.exe` |
 
 These are installers, not portable builds. The EXE is normally sufficient; you do not also need to install the MSI. `Source code (zip)` and `Source code (tar.gz)` are not ready-to-run applications.
 
@@ -135,13 +137,13 @@ Open the download folder in File Explorer, type `powershell` in the address bar,
 x64:
 
 ```powershell
-Get-FileHash -LiteralPath '.\EmoShelf_1.0.0_windows-x86_64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
+Get-FileHash -LiteralPath '.\EmoShelf_1.1.0_windows-x86_64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
 ```
 
 ARM64:
 
 ```powershell
-Get-FileHash -LiteralPath '.\EmoShelf_1.0.0_windows-aarch64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
+Get-FileHash -LiteralPath '.\EmoShelf_1.1.0_windows-aarch64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
 ```
 
 Open `SHA256SUMS.txt` from the same release in Notepad. Compare the output's `Hash` with **the line for the same filename**. All 64 characters must match; letter case does not matter. Do not check only the beginning or end. If the downloaded filename has a suffix such as `(1)`, adjust the command to match the actual filename, but compare against the checksum entry for the original release filename.

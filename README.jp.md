@@ -59,22 +59,24 @@ Alt+Eは、背面や最小化された状態からも棚を前面へ呼び出し
 **All**は全絵文字の一覧を開き、もう一度クリックすると検索とカテゴリの絞り込みを解除します。
 既存の棚と`Ctrl+1..9`の割り当ては変わりません。実機でのキーボード操作と外部アプリとの互換性は引き続き検証中です。詳しくは上記の検証記録を参照してください。
 
-## 絵文字の見た目：使えるものと今後の予定
+## 絵文字の見た目
 
-| スタイル | 現在の利用状況 |
+| スタイル | 入手方法 |
 | --- | --- |
 | Twemoji | 本体同梱。オフラインで利用可能 |
 | Native / System（OS標準） | OSの絵文字フォントを使用。追加ダウンロード不要 |
-| Fluent Emoji・Noto Emoji・OpenMoji | パックを扱う機能は実装済み。ダウンロード用パックは未公開 |
+| Fluent Emoji・Noto Emoji・OpenMoji | [GitHub Releases](https://github.com/ELRdn/EmoShelf/releases/latest)の署名付きパック（v1.1.0以降） |
 
-標準の2種類はすぐに使える状態で提供し、追加の3種類はGitHub Releasesで署名付きパックとして配布する方針です。
-今後、アプリ内で見本を確認し、ダウンロード・導入・更新できる画面を追加します。導入後はオフラインで使えます。
-**アプリ内ダウンロードはまだ実装されていません。** 現在は、信頼する検証鍵を組み込んだアプリで、手元のパックファイルを選んで導入できます。未導入・無効のパックは設定画面に明示します。
+追加するには、配布ページから`.emoshelf-renderer`ファイルをダウンロードし、**設定 → 追加の絵文字スタイル → パックを追加**でファイルを選びます。
+その後**絵文字の見た目**で選択してください。導入後はオフラインで使えます。
+EmoShelfは導入時と読み込み時に、署名・各ファイルのハッシュ・SVGの内容を確認します。スタイルに無い絵文字はTwemojiで表示します。
 
 スタイル変更はEmoShelf内の表示に適用されます。他のアプリへ文字として貼り付けた絵文字は、そのアプリの絵文字フォントで表示されます。
-残っている作業は[パックの仕様と配布手順](app/docs/renderer-packs.md)を参照してください。
+形式と検証の仕組みは[パックの仕様](app/docs/renderer-packs.md)を参照してください。
 
 ## 開発状況 — 2026年9月27日
+
+v1.1.0で、署名付きのFluent・Noto・OpenMojiスタイルパックを追加しました。x64のインストーラーでは、3種類の導入・表示・削除をCIで確認しています。
 
 2026-09-27に正式版v1.0.0を公開しました。x64のインストーラーはCIでインストール・全デスクトップテスト・アンインストールを、ARM64は起動と描画を確認しています。
 
@@ -89,7 +91,7 @@ Alt+Eは、背面や最小化された状態からも棚を前面へ呼び出し
 
 Windows 11のx64とARM64を対象に、**コード署名なしで配布**しています。インストーラーとチェックサムは[GitHub Releases](https://github.com/ELRdn/EmoShelf/releases)から入手してください。
 
-現在の版は、最初の正式版[v1.0.0](https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0)です。Windowsで発行元不明やSmartScreenの警告が表示される場合があります。
+現在の版は、追加の絵文字スタイルに対応した[v1.1.0](https://github.com/ELRdn/EmoShelf/releases/tag/v1.1.0)です。Windowsで発行元不明やSmartScreenの警告が表示される場合があります。
 
 各インストーラーは、公開前にCIでインストールとアンインストールを確認しています。SignPathによる署名提供は受けていません。[配布方針](./CODE_SIGNING_POLICY.md)も参照してください。ローカル候補やCIの生成物は公開済みリリースではありません。
 
@@ -106,12 +108,12 @@ SmartScreenの**「詳細情報」→「実行」**を検討できるのは、�
 
 Windowsの **設定 → システム → バージョン情報 → システムの種類** で、プロセッサが「x64ベース」か「ARMベース」かを確認してください。「64ビット」という表示だけでは区別できません。
 
-[公式v1.0.0の配布ページ](https://github.com/ELRdn/EmoShelf/releases/tag/v1.0.0)の**配布ファイル欄（Assets）**から、次のどちらか1つと`SHA256SUMS.txt`を同じフォルダーへダウンロードします。
+[公式v1.1.0の配布ページ](https://github.com/ELRdn/EmoShelf/releases/tag/v1.1.0)の**配布ファイル欄（Assets）**から、次のどちらか1つと`SHA256SUMS.txt`を同じフォルダーへダウンロードします。
 
 | PCの種類 | ダウンロードするインストーラー |
 | --- | --- |
-| x64（Intel / AMD） | `EmoShelf_1.0.0_windows-x86_64_UNSIGNED-setup.exe` |
-| ARM64（Snapdragonなど） | `EmoShelf_1.0.0_windows-aarch64_UNSIGNED-setup.exe` |
+| x64（Intel / AMD） | `EmoShelf_1.1.0_windows-x86_64_UNSIGNED-setup.exe` |
+| ARM64（Snapdragonなど） | `EmoShelf_1.1.0_windows-aarch64_UNSIGNED-setup.exe` |
 
 これはインストーラーであり、ポータブル版ではありません。通常はEXEだけでよく、MSIも重ねてインストールする必要はありません。`Source code (zip)` / `Source code (tar.gz)`はソースコードであり、そのまま実行するためのファイルではありません。
 
@@ -124,13 +126,13 @@ Windowsの **設定 → システム → バージョン情報 → システム�
 x64の場合：
 
 ```powershell
-Get-FileHash -LiteralPath '.\EmoShelf_1.0.0_windows-x86_64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
+Get-FileHash -LiteralPath '.\EmoShelf_1.1.0_windows-x86_64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
 ```
 
 ARM64の場合：
 
 ```powershell
-Get-FileHash -LiteralPath '.\EmoShelf_1.0.0_windows-aarch64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
+Get-FileHash -LiteralPath '.\EmoShelf_1.1.0_windows-aarch64_UNSIGNED-setup.exe' -Algorithm SHA256 | Format-List
 ```
 
 同じ配布ページから取得した`SHA256SUMS.txt`をメモ帳で開き、**同じファイル名の行**と出力の`Hash`を比較します。64桁すべての一致が必要です（英字の大文字・小文字は無視できます）。先頭や末尾だけで判断しないでください。ファイル名に`(1)`などが付いている場合は、コマンドの名前を実際の名前に合わせ、照合先には元の配布ファイル名の行を使います。

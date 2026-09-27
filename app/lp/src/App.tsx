@@ -51,7 +51,7 @@ function Arrow({ diagonal = false }: { diagonal?: boolean }) {
 const copy = {
   ja: {
     download: "ダウンロード",
-    releaseNote: "v1.0.0 公開中 · 無料でダウンロード",
+    releaseNote: "v1.1.0 公開中 · 無料でダウンロード",
     downloadTitle: "はじめる前に、知っておきたいこと。",
     downloadBody:
       "Windows 11向けの無料アプリです。コード署名なしで提供し、更新は手動です。",
@@ -148,12 +148,12 @@ const copy = {
       ],
       [
         "絵文字の見た目も変えられますか？",
-        "TwemojiとWindows標準の表示を切り替えられます。貼り付け先では、そのアプリの絵文字フォントで表示されます。Fluent・Noto・OpenMojiの追加パックは配布準備中です。",
+        "TwemojiとWindows標準に加え、v1.1.0からFluent・Noto・OpenMojiの追加パックをGitHubの配布ページから無料で導入できます。貼り付け先では、そのアプリの絵文字フォントで表示されます。",
       ],
     ],
     final: "あなたの棚、今日から。",
     finalBody: "毎日の「これこれ」を、もっと近くに。最新情報はXとGitHubで。",
-    preparing: "v1.0.0 公開中",
+    preparing: "v1.1.0 公開中",
     pending: "リンクは公開準備中です。",
     github: "GitHubで開発を見る",
     footer: "あなたらしさを、すぐそばに。",
@@ -161,7 +161,7 @@ const copy = {
   },
   en: {
     download: "Get EmoShelf",
-    releaseNote: "v1.0.0 is here · Free download",
+    releaseNote: "v1.1.0 is here · Free download",
     downloadTitle: "A few things before you start.",
     downloadBody:
       "A free app for Windows 11, distributed without code signing. Updates are manual.",
@@ -257,13 +257,13 @@ const copy = {
       ],
       [
         "Can I change the emoji style?",
-        "You can switch between Twemoji and Windows native emoji. Pasted text uses the destination app's emoji font. Optional Fluent, Noto, and OpenMoji packs are not published yet.",
+        "Yes. Twemoji and Windows native emoji are built in, and since v1.1.0 you can add free Fluent, Noto, and OpenMoji packs from the GitHub release page. Pasted text uses the destination app's emoji font.",
       ],
     ],
     final: "Your shelf is ready.",
     finalBody:
       "Your everyday favorites, a little closer. Follow along on X and GitHub.",
-    preparing: "v1.0.0 available",
+    preparing: "v1.1.0 available",
     pending: "This link is being prepared.",
     github: "Explore on GitHub",
     footer: "A little closer to you.",
