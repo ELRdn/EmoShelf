@@ -57,12 +57,31 @@ describe("EmoShelf desktop shell", () => {
 
   it("passes accessibility checks in the rendered shelf and settings", async () => {
     await browser.execute(axe.source);
+    // Contrast is checked on the settled UI; a running modal or theme
+    // animation blends colors and makes the result timing-dependent.
     const audit = () =>
       browser.executeAsync((done) => {
-        window.axe
-          .run(document, {
-            runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
-          })
+        const settled = () =>
+          Promise.all(
+            document
+              .getAnimations()
+              .filter(
+                (animation) =>
+                  animation.effect?.getComputedTiming().endTime !== Infinity,
+              )
+              .map((animation) => animation.finished.catch(() => undefined)),
+          );
+        settled()
+          .then(() => new Promise((resolve) => requestAnimationFrame(resolve)))
+          .then(settled)
+          .then(() =>
+            window.axe.run(document, {
+              runOnly: {
+                type: "tag",
+                values: ["wcag2a", "wcag2aa", "wcag21aa"],
+              },
+            }),
+          )
           .then((result) =>
             done(
               result.violations.map((entry) => ({
