@@ -1,6 +1,8 @@
 param(
   [Parameter(Mandatory)][string]$Installer,
-  [Parameter(Mandatory)][string]$InstallRoot
+  [Parameter(Mandatory)][string]$InstallRoot,
+  # Launch the installed app and require the rendered shelf page instead of WebDriver E2E.
+  [switch]$LaunchCheck
 )
 $ErrorActionPreference = 'Stop'
 # Production identifiers are safe only on a disposable CI runner.
@@ -34,10 +36,28 @@ try {
   if ((Get-AuthenticodeSignature -LiteralPath $appBinary).Status -ne 'NotSigned') {
     throw 'Unexpected installed application signature status.'
   }
-  $env:EMOSHELF_E2E_BINARY = $appBinary
-  $env:EMOSHELF_E2E_SKIP_BUILD = '1'
-  pnpm test:e2e
-  if ($LASTEXITCODE -ne 0) { throw 'Installed application E2E failed.' }
+  if ($LaunchCheck) {
+    # Requires the WebView2 debug-port policy set by the workflow; the port is read from its user data.
+    $portFile = Join-Path $env:LOCALAPPDATA 'com.emoshelf.app\EBWebView\DevToolsActivePort'
+    $app = Start-Process -FilePath $appBinary -PassThru
+    $deadline = (Get-Date).AddSeconds(60)
+    $rendered = $false
+    while (-not $rendered -and (Get-Date) -lt $deadline) {
+      Start-Sleep -Seconds 1
+      if ($app.HasExited) { throw 'Installed application exited during launch check.' }
+      if (-not (Test-Path -LiteralPath $portFile)) { continue }
+      $port = (Get-Content -LiteralPath $portFile -TotalCount 1).Trim()
+      $pages = try { Invoke-RestMethod "http://127.0.0.1:$port/json/list" -TimeoutSec 5 } catch { @() }
+      $rendered = [bool]($pages | Where-Object { $_.type -eq 'page' -and $_.url -like 'http://tauri.localhost/*' -and $_.title -eq 'EmoShelf' })
+    }
+    if (-not $rendered) { throw 'Installed application did not render the shelf page.' }
+    Write-Output 'Installed application launched and rendered the shelf page.'
+  } else {
+    $env:EMOSHELF_E2E_BINARY = $appBinary
+    $env:EMOSHELF_E2E_SKIP_BUILD = '1'
+    pnpm test:e2e
+    if ($LASTEXITCODE -ne 0) { throw 'Installed application E2E failed.' }
+  }
 } finally {
   if ($appBinary) {
     Get-Process -Name emoshelf -ErrorAction SilentlyContinue |
@@ -52,4 +72,4 @@ try {
   if ($uninstall -and $uninstall.ExitCode -notin @(0, 1605)) { throw "Uninstall failed: $($uninstall.ExitCode)" }
 }
 if ($appBinary -and (Test-Path -LiteralPath $appBinary)) { throw 'Application remained after uninstall.' }
-Write-Output 'Unsigned installer, installed E2E, and uninstall passed.'
+Write-Output "Unsigned installer, installed $(if ($LaunchCheck) { 'launch check' } else { 'E2E' }), and uninstall passed."

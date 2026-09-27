@@ -136,13 +136,15 @@ jobs:
           if ($files.Count -ne 1) { throw 'Expected exactly one installer' }
           $installer = $files[0].FullName
           $before = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
-          & app/tools/verify-unsigned-installer.ps1 -Installer $installer -InstallRoot (Join-Path $env:RUNNER_TEMP 'EmoShelfUnsigned')
+          # ARM64 runners attach EdgeDriver to a blank page; there, require the rendered shelf page instead.
+          $launchCheck = $env:RELEASE_ARCH -eq 'aarch64'
+          & app/tools/verify-unsigned-installer.ps1 -Installer $installer -InstallRoot (Join-Path $env:RUNNER_TEMP 'EmoShelfUnsigned') -LaunchCheck:$launchCheck
           if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne $before) { throw 'Installer changed during qualification' }
           New-Item -ItemType Directory -Force -Path release | Out-Null
           $suffix = if ($extension -eq '.exe') { '-setup.exe' } else { '.msi' }
           $name = "EmoShelf_1.0.0_windows-$($env:RELEASE_ARCH)_UNSIGNED$suffix"
           Copy-Item -LiteralPath $installer -Destination (Join-Path release $name)
-          @{ commit=$env:GITHUB_SHA; sourceCiRun=$env:SOURCE_CI_RUN; verificationRun=$env:GITHUB_RUN_ID; architecture=$env:RELEASE_ARCH; bundle=$env:RELEASE_BUNDLE; file=$name; sha256=$before.ToLowerInvariant(); authenticode='NotSigned'; installedE2E='passed'; uninstall='passed'; updateMode='manual' } |
+          @{ commit=$env:GITHUB_SHA; sourceCiRun=$env:SOURCE_CI_RUN; verificationRun=$env:GITHUB_RUN_ID; architecture=$env:RELEASE_ARCH; bundle=$env:RELEASE_BUNDLE; file=$name; sha256=$before.ToLowerInvariant(); authenticode='NotSigned'; installedCheck=$(if ($launchCheck) { 'launch-render' } else { 'e2e' }); uninstall='passed'; updateMode='manual' } |
             ConvertTo-Json | Set-Content "release/provenance-$($env:RELEASE_ARCH)-$($env:RELEASE_BUNDLE).json" -Encoding utf8
       - uses: actions/upload-artifact@v7
         with:

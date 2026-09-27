@@ -50,4 +50,4 @@ Upgrading from RC 1 keeps your shelf data. Existing schema-v1 data is migrated o
 - EmoShelf is Windows 11 only. Cloud sync, accounts, and social features are out of scope.
 - Renderer artwork remains subject to its own license and attribution.
 
-Each installer was installed, tested and uninstalled in CI before this release was created.
+Every installer was installed and uninstalled in CI before this release was created. The x64 installers passed the full desktop test suite; the ARM64 installers were checked to launch and render the shelf.
