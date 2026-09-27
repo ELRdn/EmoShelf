@@ -119,6 +119,11 @@ jobs:
           if ((Get-Item -LiteralPath $driver).VersionInfo.ProductVersion -ne $version) { throw 'EdgeDriver does not match WebView2' }
           Write-Output "WebView2 and EdgeDriver $version ($package)"
           $driverDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          # Elevated runners ignore EdgeDriver's WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS,
+          # so the debug port never opens. Supply it by machine policy on this disposable runner.
+          $policy = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
+          New-Item -Path $policy -Force | Out-Null
+          New-ItemProperty -Path $policy -Name 'emoshelf.exe' -Value '--remote-debugging-port=0' -PropertyType String -Force | Out-Null
       - name: Verify installer, run installed application tests and uninstall
         shell: pwsh
         env:
