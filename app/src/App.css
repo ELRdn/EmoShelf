@@ -1989,6 +1989,15 @@ kbd {
   white-space: nowrap;
 }
 
+.renderer-pack-link {
+  min-height: 28px;
+  margin-top: 2px;
+  padding: 0;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .renderer-pack-manager p {
   margin: 4px 0 0;
   color: var(--text-secondary);

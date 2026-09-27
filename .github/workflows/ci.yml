@@ -14,6 +14,9 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # Public verification key for signed emoji style packs (the private key is a release secret).
+  EMOSHELF_RENDERER_KEY_ID: emoshelf-renderer-v1
+  EMOSHELF_RENDERER_PUBLIC_KEY_BASE64: zWKHh8bdrfAjZCmmzGvxSm+wVhf4gx7WU5odkGN4LMM=
 
 jobs:
   frontend:

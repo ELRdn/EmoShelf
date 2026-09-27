@@ -6,9 +6,9 @@ on:
       version:
         description: SemVer without the leading v
         required: true
-        default: 1.0.0
+        default: 1.1.0
       confirmation:
-        description: Type RELEASE_v1.0.0 to prepare a signed draft for qualification
+        description: Type RELEASE_v1.1.0 to prepare a signed draft for qualification
         required: true
 
 permissions:
@@ -70,8 +70,8 @@ jobs:
           set -euo pipefail
           test "$RELEASE_REF" = "refs/heads/main"
           test "$REPOSITORY_PRIVATE" = "false"
-          test "$RELEASE_VERSION" = "1.0.0"
-          test "$RELEASE_CONFIRMATION" = "RELEASE_v1.0.0"
+          test "$RELEASE_VERSION" = "1.1.0"
+          test "$RELEASE_CONFIRMATION" = "RELEASE_v1.1.0"
           for required_name in \
             SIGNPATH_ORGANIZATION_ID \
             SIGNPATH_API_TOKEN \
@@ -381,10 +381,10 @@ jobs:
         run: |
           if ("${{ matrix.bundle }}" -eq "nsis") {
             $signed = @(Get-ChildItem signing/signed-installers -Recurse -Filter *.exe)
-            $output = "release/EmoShelf_1.0.0_${{ matrix.release_suffix }}-setup.exe"
+            $output = "release/EmoShelf_1.1.0_${{ matrix.release_suffix }}-setup.exe"
           } else {
             $signed = @(Get-ChildItem signing/signed-installers -Recurse -Filter *.msi)
-            $output = "release/EmoShelf_1.0.0_${{ matrix.release_suffix }}.msi"
+            $output = "release/EmoShelf_1.1.0_${{ matrix.release_suffix }}.msi"
           }
           if ($signed.Count -ne 1) {
             throw "Expected exactly one signed ${{ matrix.bundle }} installer."
@@ -542,7 +542,7 @@ jobs:
           if ($uninstall.ExitCode -ne 0) { throw "MSI uninstall failed: $($uninstall.ExitCode)" }
 
   publish:
-    name: Prepare signed v1.0.0 draft
+    name: Prepare signed v1.1.0 draft
     needs: [renderer-packs, build-windows, installer-smoke]
     runs-on: ubuntu-latest
     environment: production-signing
@@ -578,8 +578,8 @@ jobs:
             --version "${{ inputs.version }}" \
             --notes-file ../RELEASE_NOTES.md \
             --base-url "https://github.com/ELRdn/EmoShelf/releases/download/v${{ inputs.version }}" \
-            --x64-file ../release/EmoShelf_1.0.0_windows-x86_64-setup.exe \
-            --arm64-file ../release/EmoShelf_1.0.0_windows-aarch64-setup.exe \
+            --x64-file ../release/EmoShelf_1.1.0_windows-x86_64-setup.exe \
+            --arm64-file ../release/EmoShelf_1.1.0_windows-aarch64-setup.exe \
             --output ../release/latest.json
           pnpm --dir app release:checksums -- \
             --directory ../release \

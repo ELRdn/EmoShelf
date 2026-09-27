@@ -56,8 +56,8 @@ for (const [name, version] of [
   ["tauri.conf.json", tauriConfig.version],
   ["Cargo.toml", cargoVersion],
 ]) {
-  if (version !== "1.0.0") {
-    fail(`${name} must declare version 1.0.0`);
+  if (version !== "1.1.0") {
+    fail(`${name} must declare version 1.1.0`);
   }
 }
 if (tauriConfig.bundle?.publisher !== "ELRdn + Contributors") {
@@ -88,10 +88,13 @@ if (
   );
 }
 
+const sourceConfig = JSON.parse(text("app/renderer-sources.json"));
 const unsignedWorkflow = text(".github/workflows/release-unsigned.yml");
 for (const marker of [
-  "UNSIGNED_v1.0.0",
+  "UNSIGNED_v1.1.0",
   "source commit",
+  "prepare-renderer-pack.mjs",
+  "EMOSHELF_RENDERER_PRIVATE_KEY",
   // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions expression, not JavaScript interpolation.
   "run-id: ${{ needs.preflight.outputs.ci-run-id }}",
   "verify-unsigned-installer.ps1",
@@ -107,6 +110,22 @@ if (!ci.includes("windows-11-arm") || !ci.includes("pnpm test:e2e")) {
   fail(
     "CI must exercise native ARM64 packaging and real Tauri WebDriverIO E2E",
   );
+}
+const rendererPublicKey = ci.match(
+  /EMOSHELF_RENDERER_PUBLIC_KEY_BASE64: ([A-Za-z0-9+/=]+)/,
+)?.[1];
+if (
+  !ci.includes(`EMOSHELF_RENDERER_KEY_ID: ${sourceConfig.keyId}`) ||
+  Buffer.from(rendererPublicKey ?? "", "base64").length !== 32
+) {
+  fail("CI builds must embed the renderer pack verification key");
+}
+if (
+  !unsignedWorkflow.includes(
+    `EMOSHELF_RENDERER_PUBLIC_KEY_BASE64: ${rendererPublicKey}`,
+  )
+) {
+  fail("unsigned release packs must be checked against the CI renderer key");
 }
 const releaseWorkflow = text(".github/workflows/release.yml");
 for (const marker of [
@@ -128,7 +147,6 @@ for (const marker of [
   }
 }
 
-const sourceConfig = JSON.parse(text("app/renderer-sources.json"));
 const rendererSources = sourceConfig.sources ?? {};
 for (const renderer of ["fluent", "noto", "openmoji"]) {
   if (!rendererSources[renderer]) {

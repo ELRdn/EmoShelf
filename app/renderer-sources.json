@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "packVersion": "1.0.0",
   "keyId": "emoshelf-renderer-v1",
-  "minAppVersion": "1.0.0",
+  "minAppVersion": "1.1.0",
   "maxAppVersionExclusive": "2.0.0",
   "sources": {
     "fluent": {

@@ -1,3 +1,4 @@
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { AppLocale } from "../lib/emoji";
 import {
   pickAndInstallRendererPack,
@@ -5,6 +6,8 @@ import {
   removeRendererPack,
   setRendererPackEnabled,
 } from "../lib/rendererPacks";
+
+const PACK_RELEASES_URL = "https://github.com/ELRdn/EmoShelf/releases/latest";
 
 interface RendererPackManagerProps {
   locale: AppLocale;
@@ -40,9 +43,24 @@ export function RendererPackManager({
           </strong>
           <p>
             {locale === "ja"
-              ? "入手済みのEmoShelf用パックを追加できます。"
-              : "Add an EmoShelf pack you have already downloaded."}
+              ? "Fluent・Noto・OpenMojiのパック（.emoshelf-renderer）を公式の配布ページからダウンロードして追加できます。"
+              : "Download Fluent, Noto or OpenMoji packs (.emoshelf-renderer) from the official release page, then install them here."}
           </p>
+          <button
+            className="text-button renderer-pack-link"
+            onClick={() =>
+              void openUrl(PACK_RELEASES_URL).catch(() =>
+                onError(
+                  locale === "ja"
+                    ? `ブラウザーを開けませんでした。${PACK_RELEASES_URL} を開いてください。`
+                    : `Could not open your browser. Visit ${PACK_RELEASES_URL}.`,
+                ),
+              )
+            }
+            type="button"
+          >
+            {locale === "ja" ? "配布ページを開く" : "Open release page"}
+          </button>
         </div>
         <button
           className="quiet-button renderer-pack-install"

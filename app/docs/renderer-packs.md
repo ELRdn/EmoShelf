@@ -1,9 +1,9 @@
 # EmoShelf Renderer Pack仕様（format v1）
 
 `.emoshelf-renderer`は、外部絵文字アートをEmoShelfへ追加する署名付きZIPコンテナ。
-v0.4では`fluent`、`noto`、`openmoji`の3つのRenderer IDだけを受理する。
+`fluent`、`noto`、`openmoji`の3つのRenderer IDだけを受理する。
 
-## 配布方針と現在地（2026-09-22）
+## 配布方針と現在地（2026-09-27）
 
 Twemojiは本体同梱、Native / SystemはOSの絵文字フォントを利用する。
 Fluent・Noto・OpenMojiは本体へ全同梱せず、GitHub Releasesの署名付き追加パックとして配る。
@@ -14,8 +14,8 @@ Fluent・Noto・OpenMojiは本体へ全同梱せず、GitHub Releasesの署名�
 | 署名・hash・互換性・SVGの検証、ローカルファイルからの導入 | 実装済み。信頼する公開鍵を組み込んだアプリが必要 |
 | 有効／無効、削除、ライセンス表示、未導入表示 | 実装済み |
 | 公式素材の固定commitとPack生成・署名用ツール | 実装済み。製品用署名・配布の完了とは別 |
-| 製品用署名鍵／検証鍵の設定、3種のPackの受け入れと公開 | 未完了。公開済みRC 1のAssetsにPackはない |
-| アプリ内の見本・容量・版表示、ダウンロード／導入／更新 | 未実装。現在の「パックを追加」はローカルファイル選択 |
+| 製品用署名鍵／検証鍵の設定、3種のPackの受け入れと公開 | v1.1.0で完了。CIが検証鍵を組み込み、未署名リリースworkflowがPackを生成・署名してAssetsへ添付する |
+| アプリ内の見本・容量・版表示、ダウンロード／導入／更新 | 未実装。配布ページからダウンロードし「パックを追加」でファイルを選ぶ |
 
 今後の導入フローは「見本を選ぶ → ダウンロード → 署名・互換性を確認 → 導入 → 選択」。
 通信失敗・容量不足・キャンセルでは既存のスタイルを保ち、再試行できる表示にする。
@@ -64,6 +64,9 @@ EMOSHELF_RENDERER_PUBLIC_KEY_BASE64
 ```
 
 両方が無い、形式が不正、manifestのkey IDと一致しない場合はPack導入をfail-closedで拒否する。
+v1.1.0以降は`.github/workflows/ci.yml`の`env`に公開鍵を置き、全ビルドへ組み込む（v1.0.0は鍵なし）。
+秘密鍵とパスワードはリポジトリSecretの`EMOSHELF_RENDERER_PRIVATE_KEY`／`EMOSHELF_RENDERER_PRIVATE_KEY_PASSWORD`に置き、
+控えは保守者がリポジトリ外で保管する。鍵を失うと、既存アプリ向けのPackを更新できない。
 秘密鍵、鍵パスワード、署名ログの機密部分はリポジトリへコミットしない。
 Updater署名鍵とは別鍵を使う。
 

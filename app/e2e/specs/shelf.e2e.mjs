@@ -6,7 +6,7 @@ describe("EmoShelf desktop shell", () => {
     const title = await $(".titlebar strong");
     await title.waitForDisplayed();
     await expect(title).toHaveText("EmoShelf");
-    await expect($(".version-pill")).toHaveText("v1.0");
+    await expect($(".version-pill")).toHaveText("v1.1");
 
     const onboarding = await $(".welcome-panel");
     if (await onboarding.isExisting()) {
