@@ -9,19 +9,25 @@ import {
   toDisplayMetadata,
 } from "../lib/emoji";
 import { translate } from "../lib/i18n";
-import type { NewShelfItem, RendererId } from "../lib/state";
+import type { EmojiSize, NewShelfItem, RendererId } from "../lib/state";
 import { EmojiArtwork } from "./EmojiArtwork";
 import { VirtualEmojiGrid } from "./VirtualEmojiGrid";
 
 interface OnboardingProps {
   locale: AppLocale;
   renderer: RendererId;
+  emojiSize: EmojiSize;
   onFinish: (items: NewShelfItem[]) => void;
 }
 
 const STARTER_EMOJIS = ["😂", "😭", "🥹", "💀", "👀", "🔥", "✨", "✅"];
 
-export function Onboarding({ locale, renderer, onFinish }: OnboardingProps) {
+export function Onboarding({
+  locale,
+  renderer,
+  emojiSize,
+  onFinish,
+}: OnboardingProps) {
   const [step, setStep] = useState<"welcome" | "pick">("welcome");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<number | "all">("all");
@@ -164,6 +170,7 @@ export function Onboarding({ locale, renderer, onFinish }: OnboardingProps) {
         onSelect={togglePicked}
         picked={picked}
         renderer={renderer}
+        size={emojiSize}
       />
 
       <footer className="onboarding-footer">

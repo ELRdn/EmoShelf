@@ -68,6 +68,8 @@ export interface CustomAsset {
   addedAt: string;
 }
 
+export type EmojiSize = "small" | "medium" | "large";
+
 export interface Settings {
   renderer: RendererId;
   theme: "dark" | "light" | "system";
@@ -81,6 +83,7 @@ export interface Settings {
   autostart: boolean;
   usageTrackingEnabled: boolean;
   shelfGlow: boolean;
+  emojiSize: EmojiSize;
   perAppBoardsEnabled: boolean;
   popupPositionBehavior: "active-monitor" | "remember-last";
 }
@@ -217,6 +220,8 @@ const settingsSchema = z
     autostart: z.boolean(),
     usageTrackingEnabled: z.boolean(),
     shelfGlow: z.boolean(),
+    // Added after schema v2 shipped; older saves fall back to the default.
+    emojiSize: z.enum(["small", "medium", "large"]).default("medium"),
     perAppBoardsEnabled: z.boolean(),
     popupPositionBehavior: z.enum(["active-monitor", "remember-last"]),
   })
@@ -310,6 +315,7 @@ export function createInitialState(): AppState {
       autostart: false,
       usageTrackingEnabled: true,
       shelfGlow: false,
+      emojiSize: "medium",
       perAppBoardsEnabled: false,
       popupPositionBehavior: "active-monitor",
     },

@@ -162,7 +162,7 @@ function TitleBar({
         </span>
         <strong data-tauri-drag-region>EmoShelf</strong>
         <span className="version-pill" data-tauri-drag-region>
-          v1.1
+          v1.2
         </span>
       </div>
       <div className="window-controls">
@@ -577,7 +577,8 @@ function App() {
     document.documentElement.dataset.reducedMotion = settings.reducedMotion
       ? "true"
       : "false";
-  }, [locale, settings.reducedMotion, settings.theme]);
+    document.documentElement.dataset.emojiSize = settings.emojiSize;
+  }, [locale, settings.emojiSize, settings.reducedMotion, settings.theme]);
 
   useEffect(() => {
     if (!loaded) {
@@ -1063,6 +1064,7 @@ function App() {
             setActiveBoardId(id);
             setModal("practice");
           }}
+          emojiSize={settings.emojiSize}
           renderer={settings.renderer}
         />
       </div>
@@ -1634,6 +1636,7 @@ function App() {
                   onSelect={selectCatalogEntry}
                   renderer={settings.renderer}
                   selectedEmoji={selection?.payload}
+                  size={settings.emojiSize}
                 />
               ) : (
                 <div className="empty-state">
@@ -1644,6 +1647,7 @@ function App() {
               )
             ) : displayedShelfItems.length ? (
               <ShelfGrid
+                canReorder={Boolean(activeBoard) && !frequentMode}
                 editMode={editMode && !frequentMode}
                 items={displayedShelfItems}
                 locale={locale}
@@ -2272,6 +2276,27 @@ function App() {
                 <option value="system">{translate(locale, "system")}</option>
                 <option value="dark">{translate(locale, "dark")}</option>
                 <option value="light">{translate(locale, "light")}</option>
+              </select>
+            </label>
+            <label className="form-field">
+              <span>{translate(locale, "emojiSize")}</span>
+              <select
+                onChange={(event) =>
+                  useShelfStore.getState().updateSettings({
+                    emojiSize: event.target.value as typeof settings.emojiSize,
+                  })
+                }
+                value={settings.emojiSize}
+              >
+                <option value="small">
+                  {translate(locale, "emojiSizeSmall")}
+                </option>
+                <option value="medium">
+                  {translate(locale, "emojiSizeMedium")}
+                </option>
+                <option value="large">
+                  {translate(locale, "emojiSizeLarge")}
+                </option>
               </select>
             </label>
             <label className="form-field">

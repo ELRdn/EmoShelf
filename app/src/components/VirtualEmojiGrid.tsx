@@ -1,13 +1,15 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppLocale, CatalogEntry } from "../lib/emoji";
-import type { RendererId } from "../lib/state";
+import { catalogGridMetrics } from "../lib/emojiSize";
+import type { EmojiSize, RendererId } from "../lib/state";
 import { EmojiArtwork } from "./EmojiArtwork";
 
 interface VirtualEmojiGridProps {
   entries: CatalogEntry[];
   locale: AppLocale;
   renderer: RendererId;
+  size?: EmojiSize;
   selectedEmoji?: string;
   picked?: ReadonlySet<string>;
   onSelect: (entry: CatalogEntry) => void;
@@ -18,6 +20,7 @@ export function VirtualEmojiGrid({
   entries,
   locale,
   renderer,
+  size = "medium",
   selectedEmoji,
   picked,
   onSelect,
@@ -40,14 +43,20 @@ export function VirtualEmojiGrid({
     return () => observer.disconnect();
   }, []);
 
-  const columns = Math.max(4, Math.floor(width / 72));
+  const { columnWidth, rowHeight } = catalogGridMetrics[size];
+  const columns = Math.max(4, Math.floor(width / columnWidth));
   const rows = Math.ceil(entries.length / columns);
   const virtualizer = useVirtualizer({
     count: rows,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 74,
+    estimateSize: () => rowHeight,
     overscan: 5,
   });
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure rows when the emoji size changes
+  useEffect(() => {
+    virtualizer.measure();
+  }, [rowHeight, virtualizer]);
   const visibleRows = virtualizer.getVirtualItems();
   const gridTemplateColumns = useMemo(
     () => `repeat(${columns}, minmax(0, 1fr))`,
@@ -85,6 +94,7 @@ export function VirtualEmojiGrid({
               key={row.key}
               style={{
                 gridTemplateColumns,
+                height: rowHeight,
                 transform: `translateY(${row.start}px)`,
               }}
             >

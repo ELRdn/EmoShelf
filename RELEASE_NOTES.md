@@ -1,14 +1,21 @@
-# EmoShelf v1.1.0
+# EmoShelf v1.2.0
 
-EmoShelf now supports three more emoji styles: **Fluent**, **Noto**, and **OpenMoji**.
-They ship as separately signed style packs, so the app stays small and you install only the styles you want.
+Emoji are now easier to see, and your shelf is easier to arrange.
+
+## What's new
+
+- **Emoji size**: choose **Small**, **Medium**, or **Large** in **Settings → Emoji size**. The default is Medium,
+  which is larger than before. Small matches the v1.1.0 layout. The setting applies to your shelves, the All list,
+  and the first-run emoji picker.
+- **Press and hold to reorder**: on your own shelves, press and hold an emoji for a moment, then drag it to a new
+  spot. A normal click still pastes right away. Keyboard reordering and removal remain in **Edit shelf**.
 
 ## Download
 
 | Your PC | Installer |
 | --- | --- |
-| Windows 11 x64 (most PCs) | `EmoShelf_1.1.0_windows-x86_64_UNSIGNED-setup.exe` |
-| Windows 11 ARM64 | `EmoShelf_1.1.0_windows-aarch64_UNSIGNED-setup.exe` |
+| Windows 11 x64 (most PCs) | `EmoShelf_1.2.0_windows-x86_64_UNSIGNED-setup.exe` |
+| Windows 11 ARM64 | `EmoShelf_1.2.0_windows-aarch64_UNSIGNED-setup.exe` |
 
 MSI packages are also provided for managed installs. These installers are **not code-signed**, so Windows may show an
 "unknown publisher" warning. Download only from this page and verify the file against `SHA256SUMS.txt`
@@ -23,23 +30,15 @@ before installing. See the [installation guide](https://github.com/ELRdn/EmoShel
 | Noto Color Emoji (Google) | `EmoShelf-noto-1.0.0.emoshelf-renderer` | Apache-2.0 |
 | OpenMoji Color (HfG Schwäbisch Gmünd) | `EmoShelf-openmoji-1.0.0.emoshelf-renderer` | CC BY-SA 4.0 |
 
-1. Install EmoShelf v1.1.0 or later. v1.0.0 cannot install packs.
-2. Download the packs you want from this page.
-3. Open **Settings → Additional emoji styles → Install pack** and choose the file.
-4. Pick the style in **Settings → Emoji appearance**.
-
-Each pack is built from a pinned commit of the official artwork and signed with an EmoShelf key. The app checks the signature,
-every file's hash, and the SVG content before installing, and again when it loads the pack. Emoji that a style does not cover
-fall back to Twemoji. The style changes what you see in EmoShelf; pasted text still uses the receiving app's emoji font.
-
-## Other changes
-
-- Settings links to the official release page for style packs.
+These are the same packs as v1.1.0. Packs you already installed keep working after the update.
+To add one, open **Settings → Additional emoji styles → Install pack**, choose the file, then pick the style in
+**Settings → Emoji appearance**. Emoji that a style does not cover fall back to Twemoji.
 
 ## Updating
 
 Updates are manual. Export a backup from Settings, then install the new version over the existing one.
-Upgrading from v1.0.0 keeps your shelf data.
+Upgrading from v1.0.0 or v1.1.0 keeps your shelf data. Existing installs switch to the new Medium size; choose Small
+in Settings to keep the previous look.
 
 ## Known boundaries
 

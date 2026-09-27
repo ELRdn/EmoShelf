@@ -630,9 +630,46 @@ kbd {
   box-shadow: 0 0 10px rgb(255 200 87 / 48%);
 }
 
+/* Emoji size setting (Settings → Emoji size). "small" is the original layout. */
+:root {
+  --catalog-tile: 74px;
+  --catalog-art: 48px;
+  --catalog-glyph: 43px;
+  --shelf-tile: 84px;
+  --shelf-art: 54px;
+  --shelf-glyph: 48px;
+  --shelf-column: 78px;
+  --shelf-sequence: 68px;
+  --shelf-sequence-glyph: 26px;
+}
+
+:root[data-emoji-size="small"] {
+  --catalog-tile: 62px;
+  --catalog-art: 38px;
+  --catalog-glyph: 34px;
+  --shelf-tile: 68px;
+  --shelf-art: 42px;
+  --shelf-glyph: 38px;
+  --shelf-column: 62px;
+  --shelf-sequence: 54px;
+  --shelf-sequence-glyph: 21px;
+}
+
+:root[data-emoji-size="large"] {
+  --catalog-tile: 88px;
+  --catalog-art: 58px;
+  --catalog-glyph: 52px;
+  --shelf-tile: 100px;
+  --shelf-art: 66px;
+  --shelf-glyph: 59px;
+  --shelf-column: 94px;
+  --shelf-sequence: 82px;
+  --shelf-sequence-glyph: 32px;
+}
+
 .shelf-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--shelf-column), 1fr));
   gap: 8px;
   align-content: start;
   margin: 0;
@@ -659,7 +696,6 @@ kbd {
   display: grid;
   gap: 7px;
   width: 100%;
-  height: 74px;
   padding: 6px 10px;
 }
 
@@ -667,7 +703,7 @@ kbd {
   position: relative;
   display: grid;
   min-width: 0;
-  height: 62px;
+  height: var(--catalog-tile);
   padding: 8px;
   place-items: center;
   background: linear-gradient(
@@ -725,11 +761,11 @@ kbd {
 
 .emoji-art {
   display: block;
-  width: 38px;
-  height: 38px;
+  width: var(--catalog-art);
+  height: var(--catalog-art);
   object-fit: contain;
-  font-size: 34px;
-  line-height: 38px;
+  font-size: var(--catalog-glyph);
+  line-height: var(--catalog-art);
   text-align: center;
 }
 
@@ -760,7 +796,7 @@ kbd {
 }
 
 .shelf-tile {
-  height: 68px;
+  height: var(--shelf-tile);
 }
 
 .shelf-tile.has-glow {
@@ -782,17 +818,18 @@ kbd {
 }
 
 .shelf-tile .emoji-art {
-  width: 42px;
-  height: 42px;
-  font-size: 38px;
+  width: var(--shelf-art);
+  height: var(--shelf-art);
+  font-size: var(--shelf-glyph);
+  line-height: var(--shelf-art);
 }
 
 .shelf-tile .emoji-sequence-art {
   display: block;
-  width: 54px;
+  width: var(--shelf-sequence);
   height: auto;
   overflow: hidden;
-  font-size: 21px;
+  font-size: var(--shelf-sequence-glyph);
   line-height: 1.2;
   letter-spacing: -4px;
   text-overflow: ellipsis;

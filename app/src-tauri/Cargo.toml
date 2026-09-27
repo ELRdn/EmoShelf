@@ -1,6 +1,6 @@
 [package]
 name = "emoshelf"
-version = "1.1.0"
+version = "1.2.0"
 description = "Your personal emoji shelf."
 authors = ["ELRdn + Contributors"]
 edition = "2021"

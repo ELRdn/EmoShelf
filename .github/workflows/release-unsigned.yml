@@ -6,9 +6,9 @@ on:
       version:
         description: SemVer without the leading v
         required: true
-        default: 1.1.0
+        default: 1.2.0
       confirmation:
-        description: Type UNSIGNED_v1.1.0 to prepare an unpublished draft
+        description: Type UNSIGNED_v1.2.0 to prepare an unpublished draft
         required: true
 
 permissions:
@@ -41,8 +41,8 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REF" = refs/heads/main
           test "$REPOSITORY_PRIVATE" = false
-          test "$RELEASE_VERSION" = 1.1.0
-          test "$CONFIRMATION" = UNSIGNED_v1.1.0
+          test "$RELEASE_VERSION" = 1.2.0
+          test "$CONFIRMATION" = UNSIGNED_v1.2.0
           node -e "for (const f of ['./app/package.json','./app/src-tauri/tauri.conf.json']) { if (require(f).version !== process.env.RELEASE_VERSION) process.exit(1) }"
           if git rev-parse --verify "refs/tags/v$RELEASE_VERSION" >/dev/null 2>&1; then
             echo '::error::Release tag already exists'; exit 1
@@ -205,7 +205,7 @@ jobs:
           if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne $before) { throw 'Installer changed during qualification' }
           New-Item -ItemType Directory -Force -Path release | Out-Null
           $suffix = if ($extension -eq '.exe') { '-setup.exe' } else { '.msi' }
-          $name = "EmoShelf_1.1.0_windows-$($env:RELEASE_ARCH)_UNSIGNED$suffix"
+          $name = "EmoShelf_1.2.0_windows-$($env:RELEASE_ARCH)_UNSIGNED$suffix"
           Copy-Item -LiteralPath $installer -Destination (Join-Path release $name)
           @{ commit=$env:GITHUB_SHA; sourceCiRun=$env:SOURCE_CI_RUN; verificationRun=$env:GITHUB_RUN_ID; architecture=$env:RELEASE_ARCH; bundle=$env:RELEASE_BUNDLE; file=$name; sha256=$before.ToLowerInvariant(); authenticode='NotSigned'; installedCheck=$(if ($launchCheck) { 'launch-render' } else { 'e2e' }); uninstall='passed'; updateMode='manual' } |
             ConvertTo-Json | Set-Content "release/provenance-$($env:RELEASE_ARCH)-$($env:RELEASE_BUNDLE).json" -Encoding utf8
@@ -244,4 +244,4 @@ jobs:
           test "$(find release -maxdepth 1 -name '*_UNSIGNED.msi' | wc -l)" -eq 2
           test "$(find release -maxdepth 1 -name '*.emoshelf-renderer' | wc -l)" -eq 3
           node app/tools/release-manifest.mjs checksums --directory release --output release/SHA256SUMS.txt
-          gh release create v1.1.0 release/* --target "$GITHUB_SHA" --title 'EmoShelf v1.1.0 (unsigned)' --notes-file RELEASE_NOTES.md --draft
+          gh release create v1.2.0 release/* --target "$GITHUB_SHA" --title 'EmoShelf v1.2.0 (unsigned)' --notes-file RELEASE_NOTES.md --draft

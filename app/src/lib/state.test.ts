@@ -12,6 +12,7 @@ describe("state schema", () => {
     expect(state.schemaVersion).toBe(STATE_SCHEMA_VERSION);
     expect(state.settings.usageTrackingEnabled).toBe(true);
     expect(state.settings.shelfGlow).toBe(false);
+    expect(state.settings.emojiSize).toBe("medium");
     expect(state.settings.perAppBoardsEnabled).toBe(false);
     expect(state.settings.locale).toBe("system");
   });
@@ -49,6 +50,19 @@ describe("state schema", () => {
     });
     expect(migrated.settings.theme).toBe("dark");
     expect(migrated.extensions.pluginOwnedValue).toEqual({ enabled: true });
+  });
+
+  it("defaults the emoji size for saves made before the setting existed", () => {
+    const initial = createInitialState();
+    const { emojiSize: _removed, ...olderSettings } = initial.settings;
+    const parsed = parseAppState({ ...initial, settings: olderSettings });
+    expect(parsed.settings.emojiSize).toBe("medium");
+    expect(() =>
+      parseAppState({
+        ...initial,
+        settings: { ...initial.settings, emojiSize: "huge" },
+      }),
+    ).toThrow();
   });
 
   it("refuses to open a future schema for writing", () => {

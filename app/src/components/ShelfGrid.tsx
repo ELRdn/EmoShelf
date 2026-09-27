@@ -15,6 +15,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { type RefObject, useRef } from "react";
 import { type AppLocale, findByEmoji } from "../lib/emoji";
 import { translate } from "../lib/i18n";
 import type { RendererId, ShelfItem } from "../lib/state";
@@ -26,6 +27,8 @@ interface ShelfGridProps {
   locale: AppLocale;
   renderer: RendererId;
   editMode: boolean;
+  /** Allows press-and-hold reordering outside edit mode. */
+  canReorder?: boolean;
   shelfGlow?: boolean;
   selectedId?: string;
   onSelect: (item: ShelfItem) => void;
@@ -124,11 +127,68 @@ function SortableShelfItem({
   );
 }
 
+// Hold this long before a tile lifts, so a normal click still pastes.
+const LONG_PRESS_MS = 350;
+
+function PressSortableShelfItem({
+  item,
+  locale,
+  renderer,
+  selected,
+  shelfGlow,
+  suppressClick,
+  onSelect,
+  onFocusItem,
+}: {
+  item: ShelfItem;
+  locale: AppLocale;
+  renderer: RendererId;
+  selected: boolean;
+  shelfGlow: boolean;
+  suppressClick: RefObject<boolean>;
+  onSelect: () => void;
+  onFocusItem?: () => void;
+}) {
+  const { listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: item.id });
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+    >
+      <button
+        aria-label={itemLabel(item, locale)}
+        data-shelf-item-id={item.id}
+        className={`emoji-tile shelf-tile${selected ? " is-selected" : ""}${isDragging ? " is-dragging" : ""}${glowClass(item, shelfGlow)}`}
+        onClick={() => {
+          if (!suppressClick.current) onSelect();
+        }}
+        onFocus={onFocusItem}
+        title={itemLabel(item, locale)}
+        type="button"
+        {...listeners}
+      >
+        {item.type === "image" ? (
+          <CustomAssetArtwork assetId={item.assetId} className="emoji-art" />
+        ) : (
+          <EmojiArtwork
+            className="emoji-art"
+            emoji={item.payload}
+            locale={locale}
+            renderer={renderer}
+          />
+        )}
+      </button>
+    </li>
+  );
+}
+
 export function ShelfGrid({
   items,
   locale,
   renderer,
   editMode,
+  canReorder = false,
   shelfGlow = false,
   selectedId,
   onSelect,
@@ -142,6 +202,13 @@ export function ShelfGrid({
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
+  // Outside edit mode only a held pointer reorders; Enter and clicks keep pasting.
+  const pressSensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { delay: LONG_PRESS_MS, tolerance: 8 },
+    }),
+  );
+  const suppressClick = useRef(false);
 
   const dragEnd = ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) {
@@ -177,6 +244,50 @@ export function ShelfGrid({
                 renderer={renderer}
                 selected={selectedId === item.id}
                 shelfGlow={shelfGlow}
+              />
+            ))}
+          </ul>
+        </SortableContext>
+      </DndContext>
+    );
+  }
+
+  if (canReorder) {
+    const release = () => {
+      // The click that ends a drag arrives after dragEnd; ignore it.
+      setTimeout(() => {
+        suppressClick.current = false;
+      }, 0);
+    };
+    return (
+      <DndContext
+        collisionDetection={closestCenter}
+        onDragCancel={release}
+        onDragEnd={(event) => {
+          dragEnd(event);
+          release();
+        }}
+        onDragStart={() => {
+          suppressClick.current = true;
+        }}
+        sensors={pressSensors}
+      >
+        <SortableContext
+          items={items.map((item) => item.id)}
+          strategy={rectSortingStrategy}
+        >
+          <ul className="shelf-grid">
+            {items.map((item) => (
+              <PressSortableShelfItem
+                item={item}
+                key={item.id}
+                locale={locale}
+                onFocusItem={onFocusItem ? () => onFocusItem(item) : undefined}
+                onSelect={() => onSelect(item)}
+                renderer={renderer}
+                selected={selectedId === item.id}
+                shelfGlow={shelfGlow}
+                suppressClick={suppressClick}
               />
             ))}
           </ul>

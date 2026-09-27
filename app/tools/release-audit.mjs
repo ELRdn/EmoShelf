@@ -56,8 +56,8 @@ for (const [name, version] of [
   ["tauri.conf.json", tauriConfig.version],
   ["Cargo.toml", cargoVersion],
 ]) {
-  if (version !== "1.1.0") {
-    fail(`${name} must declare version 1.1.0`);
+  if (version !== "1.2.0") {
+    fail(`${name} must declare version 1.2.0`);
   }
 }
 if (tauriConfig.bundle?.publisher !== "ELRdn + Contributors") {
@@ -91,7 +91,7 @@ if (
 const sourceConfig = JSON.parse(text("app/renderer-sources.json"));
 const unsignedWorkflow = text(".github/workflows/release-unsigned.yml");
 for (const marker of [
-  "UNSIGNED_v1.1.0",
+  "UNSIGNED_v1.2.0",
   "source commit",
   "prepare-renderer-pack.mjs",
   "EMOSHELF_RENDERER_PRIVATE_KEY",
