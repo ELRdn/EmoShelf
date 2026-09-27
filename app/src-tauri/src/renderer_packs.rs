@@ -273,7 +273,8 @@ fn validate_pack_at(
             return Err("renderer pack expands beyond 128 MiB".to_string());
         }
         if entry.is_dir() {
-            if name != "emoji/" {
+            // enclosed_name() drops the trailing slash of directory entries.
+            if name != "emoji" {
                 return Err(format!("unsupported renderer pack directory: {name}"));
             }
             continue;
@@ -710,6 +711,17 @@ mod tests {
         signing_key: &SigningKey,
         extra: Option<(&str, &[u8])>,
     ) {
+        write_pack_with_directories(path, manifest, svg, signing_key, extra, &[]);
+    }
+
+    fn write_pack_with_directories(
+        path: &Path,
+        manifest: &RendererPackManifest,
+        svg: &[u8],
+        signing_key: &SigningKey,
+        extra: Option<(&str, &[u8])>,
+        directories: &[&str],
+    ) {
         let manifest_bytes = serde_json::to_vec(manifest).expect("manifest");
         let signature = signing_key.sign(&manifest_bytes).to_bytes();
         let file = std::fs::File::create(path).expect("pack file");
@@ -717,6 +729,9 @@ mod tests {
         let options = SimpleFileOptions::default()
             .compression_method(CompressionMethod::Deflated)
             .unix_permissions(0o644);
+        for directory in directories {
+            zip.add_directory(*directory, options).expect("directory");
+        }
         for (name, bytes) in [
             ("manifest.json", manifest_bytes.as_slice()),
             ("signature.ed25519", signature.as_slice()),
@@ -747,6 +762,33 @@ mod tests {
         .expect("valid pack");
         assert_eq!(pack.manifest.renderer_id, "fluent");
         assert_eq!(pack.assets.len(), 1);
+    }
+
+    #[test]
+    fn zip_tool_directory_entries_are_limited_to_emoji() {
+        let svg = test_svg();
+        let version = Version::parse("0.4.0").expect("version");
+        let dir = TempDir::new("directories");
+        let path = dir.path().join("emoji-dir.emoshelf-renderer");
+        write_pack_with_directories(
+            &path,
+            &manifest_for(&svg),
+            &svg,
+            &test_key(),
+            None,
+            &["emoji/"],
+        );
+        assert!(validate_pack_at(&path, &trusted_keys(), &version).is_ok());
+        let path = dir.path().join("other-dir.emoshelf-renderer");
+        write_pack_with_directories(
+            &path,
+            &manifest_for(&svg),
+            &svg,
+            &test_key(),
+            None,
+            &["other/"],
+        );
+        assert!(validate_pack_at(&path, &trusted_keys(), &version).is_err());
     }
 
     #[test]

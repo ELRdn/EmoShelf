@@ -208,7 +208,7 @@ jobs:
               --catalog app/node_modules/emojibase-data/en/data.json
             (
               cd "renderer-stage/$renderer_name"
-              zip -X -q -r "../../renderer-release/EmoShelf-${renderer_name}-1.0.0.emoshelf-renderer" \
+              zip -X -D -q -r "../../renderer-release/EmoShelf-${renderer_name}-1.0.0.emoshelf-renderer" \
                 manifest.json signature.ed25519 LICENSE.txt emoji
             )
           done
