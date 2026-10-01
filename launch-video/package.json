@@ -1,0 +1,30 @@
+{
+  "name": "emoshelf-launch-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio",
+    "assets": "node scripts/fetch-emoji.mjs",
+    "stills": "node scripts/render-stills.mjs",
+    "typecheck": "tsc --noEmit",
+    "sfx": "node scripts/make-sfx.mjs",
+    "video": "node scripts/render-video.mjs"
+  },
+  "dependencies": {
+    "@remotion/bundler": "^4.0.529",
+    "@remotion/cli": "^4.0.529",
+    "@remotion/fonts": "^4.0.529",
+    "@remotion/media": "^4.0.529",
+    "@remotion/renderer": "^4.0.529",
+    "@remotion/transitions": "^4.0.529",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "remotion": "^4.0.529"
+  },
+  "devDependencies": {
+    "@twemoji/svg": "^15.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^7.0.2"
+  }
+}
