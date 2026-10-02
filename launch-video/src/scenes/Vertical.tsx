@@ -1,6 +1,9 @@
-import { AbsoluteFill, Easing, Img, interpolate, Series, staticFile, useCurrentFrame } from "remotion";
+import { TransitionSeries } from "@remotion/transitions";
+import { Fragment } from "react";
+import { AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { bouncy, ease, keys, out, snappy } from "../anim";
 import { Backdrop } from "../components/Backdrop";
+import { beat, Bgm, DROP } from "../components/Bgm";
 import { ChatWindow } from "../components/ChatWindow";
 import { Cursor } from "../components/Cursor";
 import { Emoji } from "../components/Emoji";
@@ -8,6 +11,7 @@ import { KeyCombo } from "../components/Keycap";
 import { type CellState, ShelfWindow } from "../components/ShelfWindow";
 import { Sfx } from "../components/Sfx";
 import { StockPanel } from "../components/StockPanel";
+import { whip, WHIP_FRAMES, whipTiming } from "../components/Whip";
 import { attribution, copy, type Lang, type Telop } from "../copy";
 import { myShelf } from "../data";
 import { mono, rounded } from "../fonts";
@@ -72,19 +76,19 @@ export const V1Hook = ({ lang }: SceneProps) => {
   const day2 = f >= V_DAY2;
   const scrollKeys: [number, number][] = day2
     ? [[V_DAY2 + 4, 0], [V_DAY2 + 20, 480], [V_DAY2 + 32, 180], [V_DAY2 + 50, 620], [V_DAY2 + 64, 340], [V_DAY2 + 80, 560]]
-    : [[34, 0], [64, 420], [84, 160], [110, 560]];
+    : [[10, 0], [44, 420], [70, 160], [104, 560]];
   const scroll = keys(f, scrollKeys);
   const blur = Math.min(3, Math.abs(scroll - keys(f - 1, scrollKeys)) * 0.14);
   const cursorKeys: [number, number, number][] = day2
     ? [[V_DAY2, 860, 1000], [V_DAY2 + 14, 560, 760], [V_DAY2 + 28, 820, 820], [V_DAY2 + 44, 540, 900], [V_DAY2 + 60, 800, 980], [V_DAY2 + 80, 600, 860]]
-    : [[24, 900, 1100], [50, 580, 760], [74, 800, 820], [96, 540, 900], [118, 780, 980]];
+    : [[0, 900, 1100], [30, 580, 760], [60, 800, 820], [88, 540, 900], [118, 780, 980]];
   const cx = keys(f, cursorKeys.map(([k, x]) => [k, x]));
   const cy = keys(f, cursorKeys.map(([k, , y]) => [k, y]));
-  const pop = snappy(f, day2 ? V_DAY2 + 2 : 28);
-  const exit = ease(f, 226, 240);
-  const pressWin = keys(f, day2 ? [[V_DAY2 - 6, 0], [V_DAY2 - 4, 1], [V_DAY2 + 4, 1], [V_DAY2 + 8, 0]] : [[18, 0], [20, 1], [30, 1], [34, 0]]);
-  const pressDot = keys(f, day2 ? [[V_DAY2 - 2, 0], [V_DAY2, 1], [V_DAY2 + 6, 1], [V_DAY2 + 10, 0]] : [[24, 0], [26, 1], [34, 1], [38, 0]]);
-  const bubble = bouncy(f, 72);
+  const pop = snappy(f, day2 ? V_DAY2 + 2 : -40);
+  const exit = ease(f, V1_FRAMES - 14, V1_FRAMES);
+  const pressWin = day2 ? keys(f, [[V_DAY2 - 6, 0], [V_DAY2 - 4, 1], [V_DAY2 + 4, 1], [V_DAY2 + 8, 0]]) : 0;
+  const pressDot = day2 ? keys(f, [[V_DAY2 - 2, 0], [V_DAY2, 1], [V_DAY2 + 6, 1], [V_DAY2 + 10, 0]]) : 0;
+  const bubble = bouncy(f, 52);
   const chip = snappy(f, V_DAY2);
   const jitter = day2 ? Math.sin(f * 1.3) * 2.5 : Math.sin(f / 14) * 2;
   return (
@@ -106,7 +110,7 @@ export const V1Hook = ({ lang }: SceneProps) => {
           <StockPanel placeholder={t(lang, "検索", "Search")} scroll={scroll} blur={blur} scale={1.25} />
         </div>
       </Pos>
-      {f > 30 && (
+      {(
         <div style={{ position: "absolute", zIndex: 4, opacity: 1 - exit }}>
           <Cursor x={cx} y={cy} scale={1.9} />
         </div>
@@ -163,11 +167,8 @@ export const V1Hook = ({ lang }: SceneProps) => {
           </div>
         </Pos>
       )}
-      <Sfx at={18} name="key" volume={0.7} />
-      <Sfx at={24} name="key" volume={0.7} />
-      <Sfx at={28} name="popSoft" volume={0.35} />
-      <Sfx at={36} name="scroll" volume={0.5} />
-      <Sfx at={72} name="popSoft" volume={0.5} />
+      <Sfx at={10} name="scroll" volume={0.5} />
+      <Sfx at={55} name="popSoft" volume={0.5} />
       <Sfx at={V_DAY2 - 5} name="key" volume={0.7} />
       <Sfx at={V_DAY2 - 1} name="key" volume={0.7} />
       <Sfx at={V_DAY2 + 4} name="scroll" volume={0.5} />
@@ -407,7 +408,7 @@ export const V3Core = ({ lang }: SceneProps) => {
 
 // ---------------------------------------------------------------------------
 // V4. End — the icon lands, then name, catch, Alt + E and the repository.
-export const V4_FRAMES = 240;
+export const V4_FRAMES = 198;
 const V_LANDING = 22;
 
 export const V4End = ({ lang }: SceneProps) => {
@@ -421,7 +422,7 @@ export const V4End = ({ lang }: SceneProps) => {
   const cta = bouncy(f, 66);
   const meta = out(f, 80, 100);
   const credit = out(f, 92, 116);
-  const press = keys(f, [[120, 0], [125, 1], [134, 1], [142, 0]]);
+  const press = keys(f, [[168, 0], [173, 1], [182, 1], [190, 0]]);
   return (
     <AbsoluteFill style={{ overflow: "hidden" }}>
       <Backdrop mode="light" glow={{ x: 50, y: 30 }} />
@@ -551,7 +552,7 @@ export const V4End = ({ lang }: SceneProps) => {
       <Sfx at={V_LANDING} name="thud" volume={0.8} />
       <Sfx at={V_LANDING + 22} name="popSoft" volume={0.35} />
       <Sfx at={66} name="pop" volume={0.45} />
-      <Sfx at={123} name="key" volume={0.7} />
+      <Sfx at={171} name="key" volume={0.7} />
     </AbsoluteFill>
   );
 };
@@ -563,16 +564,24 @@ export const verticalScenes = [
   { id: "V4-End", C: V4End, frames: V4_FRAMES, time: "0:11–0:15", still: 200 },
 ];
 
-export const SHORT_FRAMES = verticalScenes.reduce((n, s) => n + s.frames, 0);
+export const SHORT_FRAMES = verticalScenes.reduce((n, s) => n + s.frames, 0) - WHIP_FRAMES;
+
+// The drop lands on the Alt + E impact (frame 251). One bar after the drop the song jumps to the last
+// chorus so its closing downbeat lands on the final Alt + E press (V4 frame 173).
+const SHORT_BGM = { head: DROP - 251, from: beat(46), to: beat(262) };
 
 export const Short = ({ lang }: { lang: Lang }) => (
   <AbsoluteFill style={{ background: "#F4F4F6" }}>
-    <Series>
-      {verticalScenes.map(({ id, C, frames }) => (
-        <Series.Sequence key={id} durationInFrames={frames} name={id} premountFor={30}>
-          <C lang={lang} />
-        </Series.Sequence>
+    <TransitionSeries>
+      {verticalScenes.map(({ id, C, frames }, i) => (
+        <Fragment key={id}>
+          {i === 3 && <TransitionSeries.Transition presentation={whip()} timing={whipTiming} />}
+          <TransitionSeries.Sequence durationInFrames={frames} name={id} premountFor={30}>
+            <C lang={lang} />
+          </TransitionSeries.Sequence>
+        </Fragment>
       ))}
-    </Series>
+    </TransitionSeries>
+    <Bgm {...SHORT_BGM} end={SHORT_FRAMES} />
   </AbsoluteFill>
 );

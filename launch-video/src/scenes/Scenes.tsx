@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { bouncy, ease, keys, out, smooth, snappy } from "../anim";
 import { Backdrop } from "../components/Backdrop";
+import { Burst } from "../components/Burst";
 import { ChatWindow } from "../components/ChatWindow";
 import { Cursor } from "../components/Cursor";
 import { Emoji, type EmojiStyle } from "../components/Emoji";
@@ -38,18 +39,18 @@ export const S1Hook = ({ lang }: SceneProps) => {
   const day2 = f >= DAY2;
   const scrollKeys: [number, number][] = day2
     ? [[DAY2 + 6, 0], [DAY2 + 26, 480], [DAY2 + 40, 180], [DAY2 + 62, 620], [DAY2 + 78, 340], [DAY2 + 92, 560]]
-    : [[46, 0], [90, 420], [118, 160], [158, 560], [185, 300]];
+    : [[14, 0], [60, 420], [92, 160], [140, 560], [185, 300]];
   const cursorKeys: [number, number, number][] = day2
     ? [[DAY2, 700, 560], [DAY2 + 16, 500, 330], [DAY2 + 32, 710, 380], [DAY2 + 48, 470, 470], [DAY2 + 64, 700, 560], [DAY2 + 80, 520, 420], [DAY2 + 94, 690, 520]]
-    : [[30, 820, 700], [64, 520, 330], [94, 720, 380], [124, 480, 470], [154, 690, 560], [185, 560, 420]];
+    : [[0, 820, 700], [34, 520, 330], [70, 720, 380], [104, 480, 470], [140, 690, 560], [185, 560, 420]];
   const cx = keys(f, cursorKeys.map(([k, x]) => [k, x]));
   const cy = keys(f, cursorKeys.map(([k, , y]) => [k, y]));
-  const popAt = day2 ? DAY2 + 2 : 38;
+  const popAt = day2 ? DAY2 + 2 : -40;
   const pop = snappy(f, popAt);
   const exit = ease(f, 284, 300);
-  const pressWin = keys(f, day2 ? [[DAY2 - 6, 0], [DAY2 - 4, 1], [DAY2 + 4, 1], [DAY2 + 8, 0]] : [[28, 0], [30, 1], [40, 1], [44, 0]]);
-  const pressDot = keys(f, day2 ? [[DAY2 - 2, 0], [DAY2, 1], [DAY2 + 6, 1], [DAY2 + 10, 0]] : [[34, 0], [36, 1], [44, 1], [48, 0]]);
-  const bubble = bouncy(f, 96);
+  const pressWin = day2 ? keys(f, [[DAY2 - 6, 0], [DAY2 - 4, 1], [DAY2 + 4, 1], [DAY2 + 8, 0]]) : 0;
+  const pressDot = day2 ? keys(f, [[DAY2 - 2, 0], [DAY2, 1], [DAY2 + 6, 1], [DAY2 + 10, 0]]) : 0;
+  const bubble = bouncy(f, 76);
   const chip = snappy(f, DAY2);
   const jitter = day2 ? Math.sin(f * 1.3) * 2.5 : Math.sin(f / 14) * 2;
   return (
@@ -69,7 +70,7 @@ export const S1Hook = ({ lang }: SceneProps) => {
           <StockPanel placeholder={t(lang, "検索", "Search")} scroll={scrollAt(f, scrollKeys)} blur={scrollBlur(f, scrollKeys)} scale={1.05} />
         </div>
       </Pos>
-      {f > 40 && (
+      {(
         <div style={{ position: "absolute", zIndex: 4, opacity: 1 - exit }}>
           <Cursor x={cx} y={cy} scale={1.7} />
         </div>
@@ -127,12 +128,9 @@ export const S1Hook = ({ lang }: SceneProps) => {
         </Pos>
       )}
       <TelopText telop={copy[lang].hook} bottom={96} start={-60} />
-      <Sfx at={28} name="key" volume={0.7} />
-      <Sfx at={34} name="key" volume={0.7} />
-      <Sfx at={38} name="popSoft" volume={0.35} />
-      <Sfx at={48} name="scroll" volume={0.5} />
-      <Sfx at={120} name="scroll" volume={0.45} />
-      <Sfx at={96} name="popSoft" volume={0.5} />
+      <Sfx at={16} name="scroll" volume={0.5} />
+      <Sfx at={94} name="scroll" volume={0.45} />
+      <Sfx at={76} name="popSoft" volume={0.5} />
       <Sfx at={DAY2 - 5} name="key" volume={0.7} />
       <Sfx at={DAY2 - 1} name="key" volume={0.7} />
       <Sfx at={DAY2 + 6} name="scroll" volume={0.5} />
@@ -397,6 +395,11 @@ export const S3Core = ({ lang }: SceneProps) => {
   );
 };
 
+const Camera = ({ frames, dx = 0, children }: { frames: number; dx?: number; children: ReactNode }) => {
+  const p = ease(useCurrentFrame(), 0, frames, 0, 1, Easing.inOut(Easing.sin));
+  return <AbsoluteFill style={{ transform: `translateX(${dx * p}px) scale(${1 + 0.04 * p})` }}>{children}</AbsoluteFill>;
+};
+
 // ---------------------------------------------------------------------------
 // 4. Arrange — shelves, drag to reorder, saved combos and custom images.
 export const S4_FRAMES = 240;
@@ -481,6 +484,7 @@ export const S4Arrange = ({ lang }: SceneProps) => {
   return (
     <AbsoluteFill style={{ overflow: "hidden" }}>
       <Backdrop mode="light" glow={{ x: 50, y: 40 }} />
+      <Camera frames={S4_FRAMES} dx={-24}>
       <div style={{ opacity: enter }}>
         <GhostShelf x={380 + (1 - fan) * 124} y={40 + (1 - fan) * 30} label="Work" rotate={-5 * fan} emoji="💼" />
         <GhostShelf x={820 - (1 - fan) * 316} y={30 + (1 - fan) * 40} label="Reactions" rotate={4 * fan} emoji="😂" />
@@ -522,6 +526,7 @@ export const S4Arrange = ({ lang }: SceneProps) => {
           <Cursor x={cx} y={cy} scale={1.7} />
         </div>
       )}
+      </Camera>
       <TelopText telop={copy[lang].arrange} bottom={96} start={16} />
       <Sfx at={0} name="whoosh" volume={0.35} />
       <Sfx at={24} name="tick" volume={0.6} />
@@ -566,6 +571,7 @@ export const S5Search = ({ lang }: SceneProps) => {
   return (
     <AbsoluteFill style={{ overflow: "hidden" }}>
       <Backdrop mode="light" glow={{ x: 45, y: 40 }} />
+      <Camera frames={S5_FRAMES} dx={20}>
       <Pos x={504 - 174 * slide} y={70} z={2}>
         <ShelfWindow
           cells={catResults}
@@ -617,6 +623,7 @@ export const S5Search = ({ lang }: SceneProps) => {
           })}
         </div>
       </Pos>
+      </Camera>
       <TelopText telop={copy[lang].search} bottom={96} start={18} />
       <Sfx at={0} name="tick" volume={0.5} />
       {split(order[0]).map((_, i) => (
@@ -666,6 +673,7 @@ export const S6Style = ({ lang }: SceneProps) => {
   return (
     <AbsoluteFill style={{ overflow: "hidden" }}>
       <Backdrop mode="light" glow={{ x: 50, y: 50 }} />
+      <Camera frames={S6_FRAMES} dx={-16}>
       <Pos x={504} y={150} z={2}>
         <div style={{ transform: `scale(${0.96 + 0.04 * enter})`, opacity: enter }}>
           <ShelfWindow
@@ -749,6 +757,7 @@ export const S6Style = ({ lang }: SceneProps) => {
           4 STYLES
         </div>
       </Pos>
+      </Camera>
       <TelopText telop={copy[lang].style} bottom={96} start={14} />
       <Sfx at={8} name="popSoft" volume={0.4} />
       {WAVES.map((w) => (
@@ -857,6 +866,8 @@ export const S7Real = ({ lang }: SceneProps) => {
 // 8. End card — the icon drops onto the stage and the call to action builds up.
 export const S8_FRAMES = 270;
 const LANDING = 24;
+// Center of the Alt + E keys on the end card.
+const BURST_AT = { x: 920, y: 620 };
 
 export const S8End = ({ lang }: SceneProps) => {
   const f = useCurrentFrame();
@@ -869,7 +880,8 @@ export const S8End = ({ lang }: SceneProps) => {
   const cta = bouncy(f, 72);
   const meta = out(f, 88, 108);
   const credit = out(f, 100, 124);
-  const press = keys(f, [[128, 0], [133, 1], [142, 1], [150, 0]]);
+  // On the downbeat of the last chorus (see Main.tsx).
+  const press = keys(f, [[102, 0], [107, 1], [116, 1], [124, 0]]);
   return (
     <AbsoluteFill style={{ overflow: "hidden" }}>
       <Backdrop mode="light" glow={{ x: 30, y: 50 }} />
@@ -908,6 +920,7 @@ export const S8End = ({ lang }: SceneProps) => {
           </div>
         </div>
       </Pos>
+      <Burst x={BURST_AT.x} y={BURST_AT.y} at={105} turn={180} />
       <Pos x={800} y={250}>
         <div style={{ fontFamily: rounded, color: color.ink }}>
           <div
@@ -975,7 +988,9 @@ export const S8End = ({ lang }: SceneProps) => {
       <Sfx at={LANDING} name="thud" volume={0.8} />
       <Sfx at={LANDING + 22} name="popSoft" volume={0.35} />
       <Sfx at={72} name="pop" volume={0.45} />
-      <Sfx at={131} name="key" volume={0.7} />
+      <Sfx at={105} name="key" volume={0.7} />
+      <Sfx at={107} name="pop" volume={0.5} />
+      <Sfx at={114} name="popSoft" volume={0.4} />
     </AbsoluteFill>
   );
 };
